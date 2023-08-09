@@ -14,11 +14,7 @@ interface ITokenExchange {
 
     function FILRECORDANDMINTDFIL(address owner, uint256 amount, uint256 sellAmount) external;
 
-    function WITHDRAWOWNERFIL(address payable owner, uint256 sellCostAmount, uint256 sellProfitAmount, uint256 feeOffset) external;
-
-    function WITHDRAWOWNERUNIONFIL(address payable owner, uint256 sellProfitAmount, uint256 feeOffset) external;
-    
-    function WITHDRAWPROPOSERUNIONFIL(address payable owner, uint256 sellCostAmount, uint256 sellDepositAmount, uint256 feeOffset) external;
+    function WITHDRAWFIL(address payable owner, uint256 amount, uint256 feeOffset) external;
 
     function getAccountUnion() external view returns (address[] memory);
 

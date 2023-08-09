@@ -47,7 +47,7 @@ interface IFilecoinMinerControllerTemplate {
 
     function initialize(CreateData memory data) external;
 
-    function adminTransferOwner(address newOwner, address payable account) external;
+    function adminTransferOwner(address newOwner) external;
 
     function adminWithdraw(address payable account) external;
 }

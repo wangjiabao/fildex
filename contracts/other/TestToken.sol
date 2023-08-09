@@ -106,6 +106,242 @@ interface IERC20Metadata is IERC20 {
     function decimals() external view returns (uint8);
 }
 
+interface IUniswapV2Factory {
+    event PairCreated(
+        address indexed token0,
+        address indexed token1,
+        address pair,
+        uint256
+    );
+
+    function feeTo() external view returns (address);
+
+    function feeToSetter() external view returns (address);
+
+    function getPair(address tokenA, address tokenB)
+    external
+    view
+    returns (address pair);
+
+    function allPairs(uint256) external view returns (address pair);
+
+    function allPairsLength() external view returns (uint256);
+
+    function createPair(address tokenA, address tokenB)
+    external
+    returns (address pair);
+
+    function setFeeTo(address) external;
+
+    function setFeeToSetter(address) external;
+}
+
+interface IUniswapV2Router01 {
+    function factory() external pure returns (address);
+
+    function WETH() external pure returns (address);
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    )
+    external
+    returns (
+        uint256 amountA,
+        uint256 amountB,
+        uint256 liquidity
+    );
+
+    function addLiquidityETH(
+        address token,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    )
+    external
+    payable
+    returns (
+        uint256 amountToken,
+        uint256 amountETH,
+        uint256 liquidity
+    );
+
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB);
+
+    function removeLiquidityETH(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountToken, uint256 amountETH);
+
+    function removeLiquidityWithPermit(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountA, uint256 amountB);
+
+    function removeLiquidityETHWithPermit(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountToken, uint256 amountETH);
+
+    function swapExactTokensForTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapTokensForExactTokens(
+        uint256 amountOut,
+        uint256 amountInMax,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapExactETHForTokens(
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable returns (uint256[] memory amounts);
+
+    function swapTokensForExactETH(
+        uint256 amountOut,
+        uint256 amountInMax,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapExactTokensForETH(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapETHForExactTokens(
+        uint256 amountOut,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable returns (uint256[] memory amounts);
+
+    function quote(
+        uint256 amountA,
+        uint256 reserveA,
+        uint256 reserveB
+    ) external pure returns (uint256 amountB);
+
+    function getAmountOut(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) external pure returns (uint256 amountOut);
+
+    function getAmountIn(
+        uint256 amountOut,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) external pure returns (uint256 amountIn);
+
+    function getAmountsOut(uint256 amountIn, address[] calldata path)
+    external
+    view
+    returns (uint256[] memory amounts);
+
+    function getAmountsIn(uint256 amountOut, address[] calldata path)
+    external
+    view
+    returns (uint256[] memory amounts);
+}
+
+interface IUniswapV2Router02 is IUniswapV2Router01 {
+    function removeLiquidityETHSupportingFeeOnTransferTokens(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountETH);
+
+    function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountETH);
+
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable;
+
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+}
+
 /**
  * @dev Implementation of the {IERC20} interface.
  *
@@ -496,8 +732,8 @@ contract Ownable is Context {
      * @dev Initializes the contract setting the deployer as the initial owner.
      */
     constructor () {
-        _owner = 0x4Fee53fd948C894e0cD1fA2f2f8b6Ef479BF5E9D;
-        emit OwnershipTransferred(address(0), 0x4Fee53fd948C894e0cD1fA2f2f8b6Ef479BF5E9D);
+        _owner = 0xFa26a3E99F007467f602bd00A312bbb3401EF839;
+        emit OwnershipTransferred(address(0), 0xFa26a3E99F007467f602bd00A312bbb3401EF839);
     }
 
     /**
@@ -538,42 +774,86 @@ contract Ownable is Context {
     }
 }
 
-contract TSU is ERC20, Ownable {
-    uint256 public sellTax;
-    uint256 public sellPoolTax;
-    address public marketingPool;
-    address public liquidityPool;
+library SafeMath {
+    function add(uint x, uint y) internal pure returns (uint z) {
+        require((z = x + y) >= x, 'ds-math-add-overflow');
+    }
 
-    constructor() ERC20("TSU", "tsu") {
-        _mint(0x0D6b5Be43797CE4345f8794e8B311d0e35dd4823, 100000000 * 10**decimals());
-        sellTax = 20;
-        marketingPool = 0x26a461468A7431c7df05927D0456077501cE4321;
+    function sub(uint x, uint y) internal pure returns (uint z) {
+        require((z = x - y) <= x, 'ds-math-sub-underflow');
+    }
+
+    function mul(uint x, uint y) internal pure returns (uint z) {
+        require(y == 0 || (z = x * y) / y == x, 'ds-math-mul-overflow');
+    }
+
+    function div(uint x, uint y) internal pure returns (uint z) {
+        require(y > 0, 'ds-math-div-overflow');
+        z = x / y;
+    }
+}
+
+contract ZKF is ERC20, Ownable {
+    using SafeMath for uint256;
+
+    IUniswapV2Router02 public uniswapV2Router;
+
+    address public usdt = 0x55d398326f99059fF775485246999027B3197955;
+    uint256 public sellTax = 20;
+    uint256 public buyTax = 20;
+    
+    address public buyAddress = 0x6997CC2156eb9A603049D37F8682D80DCB33De77;
+    address public sellAddress = 0x65394d5D64fc0C6313174eb3a05702b9C0C8b7DA;
+
+    address public liquidityPool;
+    bool swapEnable = true;
+
+    mapping(address=>bool) public white;
+    mapping(address=>bool) public black;
+
+    constructor() ERC20("ZKF", "ZKF") {
+        uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        liquidityPool = IUniswapV2Factory(uniswapV2Router.factory()).createPair(address(this), usdt);
+
+        _mint(0xD1d9Ea477C8A3d94a6fbD3698c8373f3C57F779f, 1000000000 * 10**decimals());
     }
 
     function _transfer(address sender, address receiver, uint256 amount) internal virtual override {
-        require(amount > 0, "amouunt err.");
+        uint256 relAmount = amount;
+        require(!black[sender] && !black[receiver], "black.");
+        
+        if (!swapEnable) {
+            require(white[sender] || white[receiver], "swap close.");
+        }
 
-        if(address(0) != liquidityPool) {
-            super._transfer(sender, marketingPool, (amount * sellTax) / 1000);
-            super._transfer(sender, liquidityPool, (amount * sellPoolTax) / 1000);
+        if (white[sender] || white[receiver]) {
+
+        } else {
+           if(receiver == liquidityPool) { // 卖
+                super._transfer(sender, sellAddress, amount.mul(sellTax).div(1000));
+                relAmount = amount.sub(amount.mul(sellTax).div(1000));
+            } else if (sender == liquidityPool) { // 买
+                super._transfer(sender, buyAddress,  amount.mul(buyTax).div(1000));
+                relAmount = amount.sub(amount.mul(buyTax).div(1000));
+            } 
         }
      
-        super._transfer(sender, receiver, amount - (amount * sellTax) / 1000 - (amount * sellPoolTax) / 1000;
-    }
-
-    function setLiquidityPoolStatus(address _lpAddress) external onlyOwner {
-        liquidityPool = _lpAddress;
-    }
-
-    function setMarketingPool(address _marketingPool) external onlyOwner {
-        marketingPool = _marketingPool;
+        super._transfer(sender, receiver, relAmount);
     }
 
     function setSellTax (uint256 tax) external onlyOwner {
         sellTax = tax;
     }
 
-    function setPoolSellTax (uint256 tax) external onlyOwner {
-        sellPoolTax = tax;
+    function setBuyTax (uint256 tax) external onlyOwner {
+        buyTax = tax;
+    }
+
+    function setWhite(address account, bool status) external onlyOwner {
+        white[account] = status;
+    }
+
+    function setBlack(address account, bool status) external onlyOwner {
+        black[account] = status;
     }
 }

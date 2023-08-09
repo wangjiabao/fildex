@@ -20,6 +20,7 @@ contract Key is ERC20PresetMinterPauser {
         super.burnFrom(account, amount);
     }
 
+    // tokenFactory
     function setBurner(address account) external {
         grantRole(BURNER_ROLE, account);
     }

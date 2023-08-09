@@ -12,8 +12,6 @@ contract TokenBank is AccessControlEnumerable {
     using SafeMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.UintSet;
-    
-    bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
 
     IDFIL public dfil;
     ITokenBankReward public keyReward;
@@ -31,10 +29,11 @@ contract TokenBank is AccessControlEnumerable {
         dfil = IDFIL(dfil_);
         keyReward = ITokenBankReward(keyReward_);
         dfilReward = ITokenBankReward(dfilReward_);
-        
-        _grantRole(SUPER_ADMIN_ROLE, _msgSender());
     }
 
+    /**
+     * 质押dfil
+     */
     function inDfil(uint256 amount) external {
         require(amount > 0, "TokenBank: amount err");
         
@@ -50,7 +49,10 @@ contract TokenBank is AccessControlEnumerable {
         emit InDfil(_msgSender(), amount);
     }
 
-    function outDfil() external {
+    /**
+     * 全部解压
+     */
+    function outAllDfil() external {
         require(userBalance[_msgSender()] > 0, "TokenBank: amount err");
 
         keyReward.outRecord(_msgSender());
@@ -66,6 +68,9 @@ contract TokenBank is AccessControlEnumerable {
         emit OutDfil(_msgSender(), amount);
     }
 
+    /**
+     * 解压某一个
+     */
     function outDfil(uint256 at) external {
         uint256 amount = userBalanceRecord[_msgSender()][at];
         require(amount > 0, "TokenBank: amount err");
@@ -88,6 +93,9 @@ contract TokenBank is AccessControlEnumerable {
         emit OutDfil(_msgSender(), amount);
     }
 
+    /**
+     * 提取收益
+     */
     function reward() external {
         keyReward.reward(_msgSender());
         dfilReward.reward(_msgSender());

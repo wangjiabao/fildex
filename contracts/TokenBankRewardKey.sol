@@ -14,7 +14,6 @@ contract TokenBankRewardKey is AccessControlEnumerable {
     using EnumerableSet for EnumerableSet.UintSet;
 
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     IKey public rewardUNIToken;
     address public bank;
@@ -65,18 +64,16 @@ contract TokenBankRewardKey is AccessControlEnumerable {
         rewardUNIToken = IKey(rewardUNIToken_);
 
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _setRoleAdmin(ADMIN_ROLE, SUPER_ADMIN_ROLE);
         _grantRole(SUPER_ADMIN_ROLE, _msgSender());
-        _grantRole(ADMIN_ROLE, _msgSender());
 
         startTime = block.timestamp;
     }
     
-    function getLastTime() public view returns(uint256) {
+    function getLastTime() public view returns (uint256) {
         return Math.min(block.timestamp, stakingFinishTime);
     }
 
-    function rewardUNIPerToken() public view returns(uint256 rewardUNI) {
+    function rewardUNIPerToken() public view returns (uint256 rewardUNI) {
         if (total == 0) {
             rewardUNI = rewardPerTokenStored;
         } else {
@@ -84,7 +81,7 @@ contract TokenBankRewardKey is AccessControlEnumerable {
         }
     }
 
-    function allRewardsOfUser(address account) public view returns(uint256[] memory) {
+    function allRewardsOfUser(address account) public view returns (uint256[] memory) {
         uint256[] memory userReward = new uint256[](userBalanceRecord[account].length);
         for (uint256 i = 0; i < userReward.length; i++) {
             userReward[i] = rewards[account][i].add(
@@ -157,24 +154,6 @@ contract TokenBankRewardKey is AccessControlEnumerable {
 
         emit Reward(account, stakingRewards);
     }
-    
-    function setRewardRateAndStakingFinishTime(uint256 rewardRate_, uint256 stakingTime_) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenBank: must have admin role to set");
-
-        rewardPerTokenStored = rewardUNIPerToken();
-        lastUpdateTime = getLastTime();
-
-        rewardRate = rewardRate_;
-        stakingFinishTime = stakingFinishTime.add(stakingTime_);
-
-        _historyRewardRate.add(rewardRate_);
-        _historyStakingTime.add(stakingTime_);
-    }
-
-    function setStakeCycleRate(uint256 rate) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenBank: must have admin role to set");
-        stakeCycleRate = rate;
-    }
 
     function getHistoryRewardRate() external view returns (uint256[] memory) {
         return _historyRewardRate.values();
@@ -190,6 +169,25 @@ contract TokenBankRewardKey is AccessControlEnumerable {
 
     function getUserBalanceRecordTime(address account) external view returns (uint256[] memory) {
         return userBalanceRecordTime[account];
+    }
+
+    // super admin
+    function setRewardRateAndStakingFinishTime(uint256 rewardRate_, uint256 stakingTime_) external {
+        require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "TokenBank: must have super admin role to set");
+
+        rewardPerTokenStored = rewardUNIPerToken();
+        lastUpdateTime = getLastTime();
+
+        rewardRate = rewardRate_;
+        stakingFinishTime = stakingFinishTime.add(stakingTime_);
+
+        _historyRewardRate.add(rewardRate_);
+        _historyStakingTime.add(stakingTime_);
+    }
+
+    function setStakeCycleRate(uint256 rate) external {
+        require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "TokenBank: must have super admin role to set");
+        stakeCycleRate = rate;
     }
 
     // default admin 

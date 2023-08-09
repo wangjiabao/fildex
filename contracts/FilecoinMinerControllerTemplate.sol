@@ -31,6 +31,7 @@ contract FilecoinMinerControllerTemplate is AccessControlEnumerable, Initializab
     uint256 public endTime;
     uint256 public extraTime;
     uint256 public pledge;
+    bool notReturnPledge; // 检查用，属于冗余的操作了，owner权限转移后此合约废掉，更丝滑一下。
 
     ITokenFactory public factory;
     ITokenTemplate public token;
@@ -54,6 +55,8 @@ contract FilecoinMinerControllerTemplate is AccessControlEnumerable, Initializab
         union = createData.union;
         timeType = createData.timeType;
         extraTime = createData.extraTime;
+
+        notReturnPledge = true;
     }
 
     /**
@@ -63,7 +66,7 @@ contract FilecoinMinerControllerTemplate is AccessControlEnumerable, Initializab
         string memory name,
         string memory logo
     ) external {
-        require(_msgSender() == owner && block.timestamp <= due && 1 <= timeType && 3 >= timeType, "err");
+        require(_msgSender() == owner && notReturnPledge && block.timestamp <= due && 1 <= timeType && 3 >= timeType, "err");
         miner.transferOwner(address(miner));
         if (address(0) == address(token)) {
             pledge = miner.getPledge();
@@ -88,33 +91,46 @@ contract FilecoinMinerControllerTemplate is AccessControlEnumerable, Initializab
         factory.setAcotrMinerController(actor, address(this));
     }
 
+    /**
+     * 接收抵押币fil，归还抵押币，归还owner权限
+     */
     function transferOwner() payable external {
-        require(_msgSender() == owner && msg.value >= pledge && block.timestamp > endTime && block.timestamp <= endTime + extraTime, "err");
+        require(_msgSender() == owner && notReturnPledge && msg.value >= pledge && block.timestamp > endTime && block.timestamp <= endTime + extraTime, "err");
+        notReturnPledge = false;
         miner.transferOwner(owner);
         token.depositFilIn{value: msg.value}();
     }
 
+    /**
+     * 中心化驱动程序，提取余额归还抵押币，归还owner权限
+     */
     function returnPledge() external {
-        require(hasRole(DRIVER_ROLE, _msgSender()) && block.timestamp > endTime + extraTime && miner.getMinerAvailableBalances() >= pledge, "err");
+        require(hasRole(DRIVER_ROLE, _msgSender()) && notReturnPledge && block.timestamp > endTime + extraTime && miner.getMinerAvailableBalances() >= pledge, "err");
+        notReturnPledge = false;
         miner.returnPledge(owner, pledge);
         token.depositFilIn{value: pledge}();
     }
 
+    /**
+     * 中心化驱动程序，驱动分红，调用算力代币合约方法
+     */
     function reward() external {
-        require(hasRole(DRIVER_ROLE, _msgSender()) && block.timestamp <= endTime + extraTime, "err");
+        require(block.timestamp <= endTime + extraTime && notReturnPledge, "err");
         token.setReward{value: miner.reward()}();
     }
 
     // factory default admin
-    function adminTransferOwner(address newOwner, address payable account) external {
-        require(address(factory) == _msgSender(), "err");
+    function adminTransferOwner(address newOwner) external {
+        require(address(factory) == _msgSender() && notReturnPledge, "err");
+        notReturnPledge = false;
         miner.transferOwner(newOwner);
-        account.transfer(address(this).balance);
     }
 
     function adminWithdraw(address payable account) external {
         require(address(factory) == _msgSender(), "err");
-        account.transfer(address(this).balance);
+        if (0 < address(this).balance) {
+            account.transfer(address(this).balance);
+        }
     }
     
     receive() external payable {}

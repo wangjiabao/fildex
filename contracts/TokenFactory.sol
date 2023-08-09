@@ -28,6 +28,8 @@ contract TokenFactory is AccessControlEnumerable {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant CREATE_TOKEN_ROLE = keccak256("CREATE_TOKEN_ROLE");
 
+    uint public defaultAdminRoleLimit;
+
     address public superAdmin;
     address public defaultAdmin;
 
@@ -82,6 +84,22 @@ contract TokenFactory is AccessControlEnumerable {
     event TokenCreated(address indexed owner, address token);
     event UnionTokenCreated(address indexed owner, address token);
 
+    modifier onlyDefaultAdminRole() {
+        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+        require(block.timestamp <= defaultAdminRoleLimit, "TokenFactory: default admin role expired");
+        _;
+    }
+
+    modifier onlySuperAdminRole() {
+        require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "TokenFactory: must have super admin role to set");
+        _;
+    }
+
+    modifier onlyAdminRole() {
+        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to remove");
+        _;
+    }
+
     constructor(
         address dfil_,
         address key_,
@@ -91,14 +109,16 @@ contract TokenFactory is AccessControlEnumerable {
         address tokenUnionTemplate_,
         address bankRewardDfil_,
         address payable top_,
-        address defaultAdmin_
+        address defaultAdmin_,
+        uint256 defaultAdminRoleLimit_
     ) {
         _setRoleAdmin(ADMIN_ROLE, SUPER_ADMIN_ROLE);
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _grantRole(SUPER_ADMIN_ROLE, _msgSender());
         _grantRole(ADMIN_ROLE, _msgSender());
-        superAdmin = _msgSender();
 
+        superAdmin = _msgSender();
+        defaultAdminRoleLimit = defaultAdminRoleLimit_;
         dfil = IDFIL(dfil_);
         key = IKey(key_);
         filecoinMinerControllerTemplate = filecoinMinerControllerTemplate_;
@@ -116,19 +136,9 @@ contract TokenFactory is AccessControlEnumerable {
         _owners.add(top);
     }
 
-    function setDefaultAdmin(address defaultAdmin_) external {
-        require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "TokenFactory: must have super admin role to set");
-        defaultAdmin = defaultAdmin_;  
-    }
-
-    function setBurnKey(uint256 rate, uint256 base) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to set");
-        require(base > 0, "TokenFactory: base err");
-
-        burnKeyRate = rate;
-        burnKeyBase = base;
-    }
-
+    /**
+     * 新增用户
+     */
     function setUser(address recommendAccount) external {
         require(_msgSender() != recommendAccount, "TokenFactory: error address");
         require(!_users.contains(_msgSender()), "TokenFactory: exists user");
@@ -149,6 +159,9 @@ contract TokenFactory is AccessControlEnumerable {
         emit UserCreated(_msgSender());
     }
 
+    /**
+     * 用户创建成为节点商申请，仅限1级用户
+     */
     function createCheckOwner() external {
         require(!_checkOwners.contains(_msgSender()), "TokenFactory: exists request message");
         require(!_owners.contains(_msgSender()), "TokenFactory: exists owner");
@@ -158,16 +171,20 @@ contract TokenFactory is AccessControlEnumerable {
         emit CheckOwnerCreated(_msgSender());
     }
 
-    function removeCheckOwner(address owner) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to remove");
+    /**
+     * 管理员移除申请
+     */
+    function removeCheckOwner(address owner) external onlyAdminRole {
         if (_checkOwners.contains(owner)) {
             _checkOwners.remove(owner);
         }
     }
 
-    function createTokenOwner(address payable owner) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to create");
-        require(address(0) != owner, "TokenFactory: onwer zero address");
+    /**
+     * 管理员通过用户成为节点商申请，创建用户节点商信息
+     */
+    function createTokenOwner(address payable owner) external onlyAdminRole {
+       require(address(0) != owner, "TokenFactory: onwer zero address");
         require(!_owners.contains(owner), "TokenFactory: exists owner");
         require(top == userWithTopUsers[owner], "TokenFactory: recommend is not top");
         require(address(0) != address(tokenExchange), "TokenFactory: not exists token exchange");
@@ -182,6 +199,9 @@ contract TokenFactory is AccessControlEnumerable {
         emit OwnerCreated(owner);
     }
 
+    /**
+     * 节点商创建发售独立算力节点申请
+     */
     function createTokenOwnerAcotrMiners(
         uint64 actor,
         uint256 costRatePerToken,
@@ -213,6 +233,9 @@ contract TokenFactory is AccessControlEnumerable {
         emit OwnerAcotrMinersCreated(_msgSender(), actor);
     }
 
+    /**
+     * 顶级用户（发行商）创建发售联合算力节点申请
+     */
     function createTopAcotrMiners(
         uint64 actor,
         uint256 costRatePerToken,
@@ -245,8 +268,10 @@ contract TokenFactory is AccessControlEnumerable {
         emit TopAcotrMinersCreated(top, actor);
     }
 
-    function removeTokenOwnerAcotrMiners(address owner, uint64 actor) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to set");
+    /**
+     * 移除独立算力发售申请
+     */
+    function removeTokenOwnerAcotrMiners(address owner, uint64 actor) external onlyAdminRole {
         if (_tokenOwnerAcotrMiners[owner].contains(actor)) {
             _tokenOwnerAcotrMiners[owner].remove(actor);
             delete _tokenOwnerAcotrMinersCheckData[owner][actor];
@@ -254,8 +279,10 @@ contract TokenFactory is AccessControlEnumerable {
         }
     }
 
-    function removeTopAcotrMiners(uint64 actor) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to set");
+    /**
+     * 移除联合算力发售申请
+     */
+    function removeTopAcotrMiners(uint64 actor) external onlyAdminRole {
         if (_topUnionAcotrMiners.contains(actor)) {
             _topUnionAcotrMiners.remove(actor);
             delete _topUnionAcotrMinersCheckData[actor];
@@ -263,10 +290,12 @@ contract TokenFactory is AccessControlEnumerable {
         }
     }
 
+    /**
+     * 通过申请并创建算力映射节点合约，映射节点合约的控制器合约
+     */
     function createActorMinerController(
         IFilecoinMinerControllerTemplate.CreateControllerData memory createControllerData
-    ) external returns (address filecoinControllerMiner, address filecoinMiner) {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to set");
+    ) external onlyAdminRole returns (address filecoinControllerMiner, address filecoinMiner) {
         uint256 tmpTimeType;
         if (createControllerData.union) {
             require(_topUnionAcotrMiners.contains(createControllerData.actor), "TokenFactory: not exists actor miner");
@@ -340,12 +369,17 @@ contract TokenFactory is AccessControlEnumerable {
         emit ActorMinerControllerCreated(createControllerData.owner, filecoinControllerMiner, filecoinMiner);
     }
 
-    // bind
+    /**
+     * 节点控制器合约调用，权限转移给节点映射合约时触发，绑定当前节点号和控制器 
+     */
     function setAcotrMinerController(uint64 actor, address controller) external {
         require(hasRole(CREATE_TOKEN_ROLE, _msgSender()), "Token: must have create token role to set");
         acotrMinerController[actor] = controller;
     }
 
+    /**
+     * 节点控制器合约调用，权限转移给节点映射合约时触发，创建算力合约
+     */
     function createToken(
         uint256 cap,
         string memory name,
@@ -412,6 +446,9 @@ contract TokenFactory is AccessControlEnumerable {
         emit TokenCreated(owner, token);
     }
 
+    /**
+     * 节点控制器合约调用，权限转移给节点映射合约时触发，创建联合算力合约
+     */
     function createUnionToken(
         uint256 cap,
         string memory name,
@@ -674,54 +711,56 @@ contract TokenFactory is AccessControlEnumerable {
         return data;
     }
 
+    // super admin
+    function setDefaultAdmin(address defaultAdmin_) external onlySuperAdminRole {
+        defaultAdmin = defaultAdmin_;  
+    }
+
+    function setBurnKey(uint256 rate, uint256 base) external onlySuperAdminRole {
+        require(base > 0, "TokenFactory: base err");
+
+        burnKeyRate = rate;
+        burnKeyBase = base;
+    }
+
     // default admin
-    function setTokenExchange(address tokenExchange_) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function setTokenExchange(address tokenExchange_) external onlyDefaultAdminRole {
         tokenExchange = ITokenExchange(tokenExchange_);
     }
 
-    function setSwapFactory(address swapFactory_) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function setSwapFactory(address swapFactory_) external onlyDefaultAdminRole {
         swapFactory = swapFactory_;
     }
 
-    function setCallPair(address callPair_) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function setCallPair(address callPair_) external onlyDefaultAdminRole {
         callPair =  callPair_;
     }
 
-    function setT(address t) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function setT(address t) external onlyDefaultAdminRole {
         tokenTemplate = t;
     }
 
-    function setTu(address t) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function setTu(address t) external onlyDefaultAdminRole {
         tokenUnionTemplate = t;
     }
 
-    function setF(address f) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function setF(address f) external onlyDefaultAdminRole {
         filecoinMinerControllerTemplate = f;
     }
 
-    function setFM(address f) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function setFM(address f) external onlyDefaultAdminRole {
         filecoinMinerTemplate = f;
     }
 
-    function setB(address b) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function setB(address b) external onlyDefaultAdminRole {
         bankRewardDfil = ITokenBankReward(b);
     }
 
-    function transferOwnerFilecoinMinerController(address controller, address newOwner, address payable account) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
-        IFilecoinMinerControllerTemplate(controller).adminTransferOwner(newOwner, account);
+    function transferOwnerFilecoinMinerController(address controller, address newOwner) external onlyDefaultAdminRole {
+        IFilecoinMinerControllerTemplate(controller).adminTransferOwner(newOwner);
     }
 
-    function withdrawFilecoinMinerController(address controller, address payable account) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenFactory: must have default admin role to set");
+    function withdrawFilecoinMinerController(address controller, address payable account) external onlyDefaultAdminRole {
         IFilecoinMinerControllerTemplate(controller).adminWithdraw(account);
     }
 }

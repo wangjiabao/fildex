@@ -22,6 +22,7 @@ contract SwapPair is ISwapPair, SwapERC20 {
     address public token0;
     address public token1;
     address public callMe;
+    uint public feeRate;
 
     uint112 private reserve0;           // uses single storage slot, accessible via getReserves
     uint112 private reserve1;           // uses single storage slot, accessible via getReserves
@@ -67,11 +68,13 @@ contract SwapPair is ISwapPair, SwapERC20 {
     }
 
     // called once by the factory at time of deployment
-    function initialize(address _token0, address _token1, address _callMe, address _rewardPool) external {
+    function initialize(address _token0, address _token1, address _callMe, address _rewardPool, uint _feeRate) external {
         require(msg.sender == factory, 'Swap: FORBIDDEN'); // sufficient check
+        require(10 >= _feeRate, 'Swap: FEERATE ERR');
         token0 = _token0;
         token1 = _token1;
         callMe = _callMe;
+        feeRate = _feeRate;
         rewardPool = IRewardPool(_rewardPool);
     }
 
@@ -187,8 +190,8 @@ contract SwapPair is ISwapPair, SwapERC20 {
         uint amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;
         require(amount0In > 0 || amount1In > 0, 'Swap: INSUFFICIENT_INPUT_AMOUNT');
         { // scope for reserve{0,1}Adjusted, avoids stack too deep errors
-        uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(8));
-        uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(8));
+        uint balance0Adjusted = balance0.mul(1000).sub(amount0In.mul(feeRate));
+        uint balance1Adjusted = balance1.mul(1000).sub(amount1In.mul(feeRate));
         require(balance0Adjusted.mul(balance1Adjusted) >= uint(_reserve0).mul(_reserve1).mul(1000**2), 'Swap: K');
         }
 
@@ -248,6 +251,9 @@ contract SwapPair is ISwapPair, SwapERC20 {
         return Math.min(block.timestamp, stakingFinishTime);
     }
 
+    /**
+     * 公式
+     */
     function rewardUNIPerToken() public view returns(uint256 rewardUNI) {
         if (totalSupply == 0) {
             rewardUNI = rewardPerTokenStored;
@@ -256,14 +262,23 @@ contract SwapPair is ISwapPair, SwapERC20 {
         }
     }
 
+    /**
+     * 用户当前质押的全部收益（用户占比*全局公式和用户变更质押时全局公式的差值，结果加上往次分红金额）。
+     */
     function allRewardsOfUser(address account) public view returns(uint256) {
        return balanceOf[account].mul(rewardUNIPerToken().sub(userRewardsPerToken[account])).div(1e18).add(rewards[account]);
     }
 
+    /**
+     * 收益提取
+     */
     function reward() external update(msg.sender) {
         _reward(msg.sender);
     }
 
+    /**
+     * 被算力合约调用，设置分红数据
+     */
     function setRewardRateAndStakingFinishTime(uint256 rewardRate_, uint256 stakingTime_) external {
         require(address(rewardPool) == msg.sender, "Swap: must reward pool");
 

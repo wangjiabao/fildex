@@ -26,7 +26,7 @@ contract SwapRouter is ISwapRouter {
         _;
     }
 
-    constructor(address _factory, address _wethSetter,address _dfil, address _tokenFactory) public {
+    constructor(address _factory, address _wethSetter, address _dfil, address _tokenFactory) public {
         factory = _factory;        
         wethSetter = _wethSetter;
         dfil = _dfil;
@@ -48,6 +48,9 @@ contract SwapRouter is ISwapRouter {
         assert(msg.sender == WETH); // only accept ETH via fallback from the WETH contract
     }
 
+    /**
+     * 质押条件判断，并质押
+     */ 
     function _stake(
         address tokenA,
         address tokenB,
@@ -72,6 +75,9 @@ contract SwapRouter is ISwapRouter {
         }
     }
 
+    /**
+     * 解押条件判断，并解押
+     */ 
     function _unStake(
         address tokenA,
         address tokenB,
