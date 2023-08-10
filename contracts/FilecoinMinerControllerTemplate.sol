@@ -94,21 +94,30 @@ contract FilecoinMinerControllerTemplate is AccessControlEnumerable, Initializab
     /**
      * 接收抵押币fil，归还抵押币，归还owner权限
      */
-    function transferOwner() payable external {
-        require(_msgSender() == owner && notReturnPledge && msg.value >= pledge && block.timestamp > endTime && block.timestamp <= endTime + extraTime, "err");
-        notReturnPledge = false;
-        miner.transferOwner(owner);
-        token.depositFilIn{value: msg.value}();
-    }
+    function transferOwner(address newOwner) payable external {
+        require(_msgSender() == owner, "err");
+        if (block.timestamp > endTime && block.timestamp <= endTime + extraTime) { // 到期和加时内
+            if (notReturnPledge && msg.value >= pledge) { // 抵押币未还且输入金额满足抵押币
+                miner.transferOwner(newOwner);
+                token.depositFilIn{value: pledge}();
+                notReturnPledge = false;
+                return;
+            }
 
-    /**
-     * 中心化驱动程序，提取余额归还抵押币，归还owner权限
-     */
-    function returnPledge() external {
-        require(hasRole(DRIVER_ROLE, _msgSender()) && notReturnPledge && block.timestamp > endTime + extraTime && miner.getMinerAvailableBalances() >= pledge, "err");
-        notReturnPledge = false;
-        miner.returnPledge(owner, pledge);
-        token.depositFilIn{value: pledge}();
+        } else if (block.timestamp > endTime + extraTime) { // 加时后
+            if(notReturnPledge && miner.getMinerAvailableBalances() >= pledge) { // 抵押币未还且余额充足
+                miner.returnPledge(newOwner, pledge);
+                token.depositFilIn{value: pledge}();
+                notReturnPledge = false;
+                return;
+            }
+
+        } else if (!notReturnPledge) { // 抵押币已还
+            miner.transferOwner(newOwner);
+            return;
+        }
+            
+        require(false, "not enough");     
     }
 
     /**
@@ -121,7 +130,7 @@ contract FilecoinMinerControllerTemplate is AccessControlEnumerable, Initializab
 
     // factory default admin
     function adminTransferOwner(address newOwner) external {
-        require(address(factory) == _msgSender() && notReturnPledge, "err");
+        require(address(factory) == _msgSender(), "err");
         notReturnPledge = false;
         miner.transferOwner(newOwner);
     }

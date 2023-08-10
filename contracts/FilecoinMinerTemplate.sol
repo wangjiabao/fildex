@@ -82,4 +82,7 @@ contract FilecoinMinerTemplate is Initializable {
     //         CommonTypes.ChainEpoch.wrap(new_expiration)
     //     );
     // }
+
+    
+    receive() external payable {}
 }
