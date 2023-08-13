@@ -21,7 +21,7 @@ library SwapLibrary {
                 hex'ff',
                 factory,
                 keccak256(abi.encodePacked(token0, token1)),
-                hex'3746f44761c0fefd625ddf5d7f157b50bfc8d5b97776305dccf9dfb751a948bd' // init code hash
+                hex'bfb2a4e8e98c64141d11771ac21679430d362fc11f2965f42df84e1194ac6c14' // init code hash
             ))));
     }
 
@@ -43,7 +43,7 @@ library SwapLibrary {
     function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) internal pure returns (uint amountOut) {
         require(amountIn > 0, 'SwapLibrary: INSUFFICIENT_INPUT_AMOUNT');
         require(reserveIn > 0 && reserveOut > 0, 'SwapLibrary: INSUFFICIENT_LIQUIDITY');
-        uint amountInWithFee = amountIn.mul(997);
+        uint amountInWithFee = amountIn.mul(1000);
         uint numerator = amountInWithFee.mul(reserveOut);
         uint denominator = reserveIn.mul(1000).add(amountInWithFee);
         amountOut = numerator / denominator;
@@ -54,7 +54,7 @@ library SwapLibrary {
         require(amountOut > 0, 'SwapLibrary: INSUFFICIENT_OUTPUT_AMOUNT');
         require(reserveIn > 0 && reserveOut > 0, 'SwapLibrary: INSUFFICIENT_LIQUIDITY');
         uint numerator = reserveIn.mul(amountOut).mul(1000);
-        uint denominator = reserveOut.sub(amountOut).mul(997);
+        uint denominator = reserveOut.sub(amountOut).mul(1000);
         amountIn = (numerator / denominator).add(1);
     }
 

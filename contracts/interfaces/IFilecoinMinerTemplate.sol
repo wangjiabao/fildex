@@ -13,4 +13,8 @@ interface IFilecoinMinerTemplate {
     function getPledge() external returns (uint256);
 
     function getMinerAvailableBalances() external returns (uint256);
+
+    function changeWorkerAddress(address new_worker, address[] memory controls) external;
+    
+    function confirmChangeWorkerAddress() external;
 }

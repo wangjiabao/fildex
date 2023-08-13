@@ -75,14 +75,24 @@ contract FilecoinMinerTemplate is Initializable {
         controller.transfer(tmp);
     }
 
-    // function changeWorkerAddress(int64 new_expiration, address new_worker) public payable {
-    //     MinerAPI.changeWorkerAddress(CommonTypes.FilActorId.wrap(actor), 
-    //     MinerTypes.ChangeWorkerAddressParams(
-    //         FilAddressUtil.fromEthAddress(new_worker),
-    //         CommonTypes.ChainEpoch.wrap(new_expiration)
-    //     );
-    // }
+    function changeWorkerAddress(address new_worker, address[] memory controls) external {
+        require(controller == msg.sender, "err");
+        CommonTypes.FilAddress[] memory controllAddress = new CommonTypes.FilAddress[](controls.length);
+        for (uint i = 0; i < controls.length; i++) {
+            controllAddress[i] = FilAddressUtil.fromEthAddress(controls[i]);
+        }
 
-    
+        MinerAPI.changeWorkerAddress(CommonTypes.FilActorId.wrap(actor),
+        MinerTypes.ChangeWorkerAddressParams(
+            FilAddressUtil.fromEthAddress(new_worker),
+            controllAddress
+        ));
+    }
+
+    function confirmChangeWorkerAddress() external {
+        require(controller == msg.sender, "err");
+        MinerAPI.confirmChangeWorkerAddress(CommonTypes.FilActorId.wrap(actor));
+    }
+
     receive() external payable {}
 }

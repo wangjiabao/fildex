@@ -6,8 +6,6 @@ import './interfaces/IRewardPool.sol';
 import './SwapPair.sol';
 
 contract SwapFactory is ISwapFactory {
-    address public feeTo;
-    uint public fee = 8;
     address public factoryAdmin;
     address public callPair;
     address public callPairSetter;
@@ -55,7 +53,7 @@ contract SwapFactory is ISwapFactory {
             IRewardPool(rewardPool).setStake(pair);
         }
 
-        ISwapPair(pair).initialize(token0, token1, callPair, rewardPool, fee);
+        ISwapPair(pair).initialize(token0, token1, callPair, rewardPool);
         getPair[token0][token1] = pair;
         getPair[token1][token0] = pair; // populate mapping in the reverse direction
         allPairs.push(pair);
@@ -67,18 +65,6 @@ contract SwapFactory is ISwapFactory {
     function setCallPair(address _callPair) external {
         require(msg.sender == callPairSetter, 'UniswapV2: FORBIDDEN');
         callPair = _callPair;
-    }
-
-    // factory admin
-    function setFeeTo(address _feeTo) external {
-        require(msg.sender == factoryAdmin, 'UniswapV2: FORBIDDEN');
-        feeTo = _feeTo;
-    }
-
-    function setFee(uint _fee) external {
-        require(msg.sender == factoryAdmin, 'UniswapV2: FORBIDDEN');
-        require(10 >= _fee, 'UniswapV2: FORBIDDEN');
-        fee = _fee;
     }
 
     function setCallPairSetter(address _callPairSetter) external {

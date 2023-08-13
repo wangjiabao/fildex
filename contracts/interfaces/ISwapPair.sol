@@ -49,5 +49,5 @@ interface ISwapPair {
     function skim(address to) external;
     function sync() external;
 
-    function initialize(address, address, address, address, uint) external;
+    function initialize(address, address, address, address) external;
 }

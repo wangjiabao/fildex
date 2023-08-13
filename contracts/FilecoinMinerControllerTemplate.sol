@@ -128,6 +128,16 @@ contract FilecoinMinerControllerTemplate is AccessControlEnumerable, Initializab
         token.setReward{value: miner.reward()}();
     }
 
+    function changeWorkerAddress(address new_worker, address[] memory controls) external {
+        require(_msgSender() == owner, "err");
+        miner.changeWorkerAddress(new_worker, controls);
+    }
+
+    function confirmChangeWorkerAddress() external {
+        require(_msgSender() == owner, "err");
+        miner.confirmChangeWorkerAddress();
+    }
+
     // factory default admin
     function adminTransferOwner(address newOwner) external {
         require(address(factory) == _msgSender(), "err");

@@ -504,5 +504,9 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
        factory = ITokenFactory(factory_);
     }
 
+    function setDao(address dao_) external onlyDefaultAdminRole {
+       dao = dao_;
+    }
+
     receive() external payable {}
 }
