@@ -13,4 +13,6 @@ interface IKey {
     function burnFrom(address account, uint256 amount) external;
 
     function setBurner(address account) external;
+
+    function totalSupply() external view returns (uint);
 }

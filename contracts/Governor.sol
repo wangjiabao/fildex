@@ -4,7 +4,6 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/governance/Governor.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorSettings.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol";
-//import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
 
@@ -16,7 +15,9 @@ contract GovernorContract is Governor, GovernorSettings, GovernorCountingSimple,
         uint256 _quorumPercentage, 
         uint256 _votingPeriod, 
         uint256 _votingDelay
-    ) Governor("GovernorContract") GovernorSettings(_votingDelay, _votingPeriod, 0) GovernorVotes(_token) GovernorVotesQuorumFraction(_quorumPercentage) GovernorTimelockControl(_timelock) {}
+    ) Governor("GovernorContract") GovernorSettings(_votingDelay, _votingPeriod, 0) GovernorVotes(_token) GovernorVotesQuorumFraction(_quorumPercentage) GovernorTimelockControl(_timelock) {
+
+    }
 
     // The following functions are overrides required by Solidity.
     function votingDelay() public view override(IGovernor, GovernorSettings) returns (uint256) {
@@ -57,6 +58,10 @@ contract GovernorContract is Governor, GovernorSettings, GovernorCountingSimple,
 
     function _executor() internal view override(Governor, GovernorTimelockControl) returns (address) {
         return super._executor();
+    }
+
+    function quorumDenominator() public pure override(GovernorVotesQuorumFraction) returns (uint256) {
+        return 10000;
     }
 
     function supportsInterface(bytes4 interfaceId) public view override(Governor, GovernorTimelockControl) returns (bool) {
