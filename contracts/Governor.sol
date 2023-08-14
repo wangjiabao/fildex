@@ -15,9 +15,7 @@ contract GovernorContract is Governor, GovernorSettings, GovernorCountingSimple,
         uint256 _quorumPercentage, 
         uint256 _votingPeriod, 
         uint256 _votingDelay
-    ) Governor("GovernorContract") GovernorSettings(_votingDelay, _votingPeriod, 0) GovernorVotes(_token) GovernorVotesQuorumFraction(_quorumPercentage) GovernorTimelockControl(_timelock) {
-
-    }
+    ) Governor("GovernorContract") GovernorSettings(_votingDelay, _votingPeriod, 0) GovernorVotes(_token) GovernorVotesQuorumFraction(_quorumPercentage) GovernorTimelockControl(_timelock) {}
 
     // The following functions are overrides required by Solidity.
     function votingDelay() public view override(IGovernor, GovernorSettings) returns (uint256) {

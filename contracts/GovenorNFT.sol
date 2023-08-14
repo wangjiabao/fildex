@@ -7,24 +7,24 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/draft-ERC721Votes.sol";
 
-contract GovenorNFT is AccessControlEnumerable, ERC721, EIP712, ERC721Enumerable, ERC721Votes {
+contract GovenorNFT is AccessControlEnumerable, ERC721, EIP712,  ERC721Votes {
     using SafeMath for uint256;
     using Counters for Counters.Counter;
 
     uint256 start;
     uint256 private _cap = 10000;
+    uint256 public totalSupply;
     IKey public key;
     Counters.Counter private _tokenIdTracker;
+    bool init;
+    address public initAccount;
 
     constructor(address key_, address account, uint256 start_) ERC721("GovenorNFT", "GovenorNFT") EIP712("GovenorNFT", "1") {
         start = start_;
         key = IKey(key_);
-        for (uint256 i = 0; i < 10; i++) {
-            safeMint(account);
-        }
+        initAccount = account;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
     }
@@ -37,15 +37,32 @@ contract GovenorNFT is AccessControlEnumerable, ERC721, EIP712, ERC721Enumerable
     }
 
     function _mint(address to, uint256 tokenId) internal override {
+        require(totalSupply.add(1) <= cap(), "GovenorNFT: cap exceeded");
         super._mint(to, tokenId);
-        require(totalSupply() <= cap(), "GovenorNFT: cap exceeded");
+        totalSupply = totalSupply.add(1);
+    }
+
+    function _init() internal {
+        for (uint256 i = 0; i < 10; i++) {
+            safeMint(initAccount);
+        }
+        init = true; 
     }
 
     function exchange(uint256 amount) public {
         require(start <= block.timestamp, "GovenorNFT: not open");
         require(amount.mul(100) >= key.totalSupply(), "GovenorNFT: amount not enough");
+
+        if (!init) {
+            _init();
+        }
+
         key.burnFrom(_msgSender(), amount);
         safeMint(_msgSender());
+
+        if (1 > totalSupply%2){
+            safeMint(initAccount);
+        }
     }
 
     function exchangeMore(uint256 amount) external  {
@@ -63,15 +80,6 @@ contract GovenorNFT is AccessControlEnumerable, ERC721, EIP712, ERC721Enumerable
     }
 
     // The following functions are overrides required by Solidity.
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 firstTokenId,
-        uint256 batchSize
-    ) internal virtual override(ERC721, ERC721Enumerable) {
-        super._beforeTokenTransfer(from, to, firstTokenId, batchSize);
-    }
-
     function _afterTokenTransfer(
         address from,
         address to,
@@ -81,7 +89,7 @@ contract GovenorNFT is AccessControlEnumerable, ERC721, EIP712, ERC721Enumerable
         super._afterTokenTransfer(from, to, tokenId, batchSize);
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(AccessControlEnumerable, ERC721, ERC721Enumerable) returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public view override(AccessControlEnumerable, ERC721) returns (bool) {
         return interfaceId == type(IAccessControl).interfaceId || super.supportsInterface(interfaceId);
     }
 }
