@@ -2,11 +2,9 @@
 pragma solidity ^0.8.19;
 
 interface IFilecoinMinerTemplate {
-    function initialize(uint64 actor_, address payable controller_) external;
+    function initialize(uint64 actor_, address payable controller_) external returns (bool);
 
-    function reward() external returns (uint256 tmp);
-
-    function returnPledge(address new_owner, uint256 pledge) external;
+    function withdraw() external returns (uint256 tmp);
 
     function transferOwner(address new_owner) external;
 
@@ -17,4 +15,8 @@ interface IFilecoinMinerTemplate {
     function changeWorkerAddress(address new_worker, address[] memory controls) external;
     
     function confirmChangeWorkerAddress() external;
+
+    function getSectorSize() external returns (uint256);
+
+    function minerRawPower() external returns (bool meetsConsensusMinimum, uint256 cap);
 }

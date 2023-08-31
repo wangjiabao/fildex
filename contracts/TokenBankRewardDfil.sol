@@ -131,6 +131,8 @@ contract TokenBankRewardDfil is AccessControlEnumerable {
         require(currentReward > 0, "TokenBank: must reward more than 0");
 
         rewardPerTokenStored = rewardUNIPerToken();
+
+        stakingFinishTime = block.timestamp;
         lastUpdateTime = getLastTime();
 
         rewardRate =  currentReward.div(stakeRewardCycle);

@@ -3,6 +3,7 @@ pragma solidity =0.5.16;
 import './interfaces/ISwapFactory.sol';
 import './interfaces/ITokenExists.sol';
 import './interfaces/IRewardPool.sol';
+import './interfaces/ISwapDFIL.sol';
 import './SwapPair.sol';
 
 contract SwapFactory is ISwapFactory {
@@ -10,6 +11,7 @@ contract SwapFactory is ISwapFactory {
     address public callPair;
     address public callPairSetter;
     address public tokenCheck;
+    address public dfil;
 
     bytes32 public constant INIT_CODE_HASH = keccak256(abi.encodePacked(type(SwapPair).creationCode));
 
@@ -18,10 +20,11 @@ contract SwapFactory is ISwapFactory {
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
-    constructor(address _factoryAdmin, address _tokenCheck, address _callPairSetter) public {
+    constructor(address _factoryAdmin, address _tokenCheck, address _dfil) public {
         factoryAdmin = _factoryAdmin;
         tokenCheck = _tokenCheck;
-        callPairSetter = _callPairSetter;
+        callPairSetter = _factoryAdmin;
+        dfil = _dfil;
     }
 
     function getAllPairs() external view returns (address[] memory) {
@@ -45,12 +48,22 @@ contract SwapFactory is ISwapFactory {
         }
         
         address rewardPool;
-        if (ITokenExists(tokenCheck).existsToken(token0) || ITokenExists(tokenCheck).existsTopUnionToken(token0)) {
+        if (
+            (ITokenExists(tokenCheck).existsToken(token0) || ITokenExists(tokenCheck).existsTopUnionToken(token0)) &&
+            address(token1) == dfil
+        ) {
             rewardPool = token0;
             IRewardPool(rewardPool).setStake(pair);
-        } else if (ITokenExists(tokenCheck).existsToken(token1) || ITokenExists(tokenCheck).existsTopUnionToken(token1)) {
+        } else if (
+            (ITokenExists(tokenCheck).existsToken(token1) || ITokenExists(tokenCheck).existsTopUnionToken(token1)) &&
+            address(token0) == dfil
+        ) {
             rewardPool = token1;
             IRewardPool(rewardPool).setStake(pair);
+        }
+
+        if (token0 == dfil || token1 == dfil) {
+            ISwapDFIL(dfil).setWhite(pair, true);
         }
 
         ISwapPair(pair).initialize(token0, token1, callPair, rewardPool);
@@ -67,8 +80,8 @@ contract SwapFactory is ISwapFactory {
         callPair = _callPair;
     }
 
-    function setCallPairSetter(address _callPairSetter) external {
-        require(msg.sender == factoryAdmin, 'UniswapV2: FORBIDDEN');
-        callPairSetter = _callPairSetter;
+    function setCallPairSetter() external {
+        require(msg.sender == callPairSetter, 'UniswapV2: FORBIDDEN');
+        callPairSetter = address(0);
     }
 }

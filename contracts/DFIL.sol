@@ -18,7 +18,6 @@ contract DFIL is ERC20PresetMinterPauser {
         require(cap_ > 0, "DFIL: cap is 0");
         _cap = cap_*10**decimals();
 
-        _setRoleAdmin(GRANT_WHITE_ROLE, SUPER_ADMIN_ROLE);
         _grantRole(SUPER_ADMIN_ROLE, _msgSender());
         _grantRole(GRANT_WHITE_ROLE, _msgSender());
     }
@@ -57,9 +56,9 @@ contract DFIL is ERC20PresetMinterPauser {
         super._transfer(from, to, amount);
     }
 
-    function setWhiteEnable(bool enable) external {
+    function setWhiteEnable() external {
         require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "DFIL: must have super admin role to set");
-        whiteEnable = enable;
+        whiteEnable = true;
     }
 
     function setWhite(address account, bool enable) external {

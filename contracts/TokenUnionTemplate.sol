@@ -44,8 +44,6 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
     uint256 public profitBasePerToken;
     uint256 public depositRatePerToken;
     uint256 public depositBasePerToken;
-    uint256 public burnKeyRate;
-    uint256 public burnKeyBase;
 
     uint256 public rewardOwnerRate;
     uint256 public rewardOwnerBase;
@@ -87,7 +85,7 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         _disableInitializers();
     }
 
-    function initialize(ITokenTemplate.CreateData calldata createData) initializer public {
+    function initialize(ITokenTemplate.CreateData calldata createData) initializer public returns (bool) {
         require(createData.cap_ > 0, "Token: cap is 0");
 
         _setRoleAdmin(ADMIN_ROLE, SUPER_ADMIN_ROLE);
@@ -95,7 +93,8 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         _grantRole(ADMIN_ROLE, createData.defaultAdmin);
         _grantRole(OWNER_ROLE, createData.owner_);
 
-        _cap = createData.cap_;
+        // 换算1T=1Token
+        _cap = createData.cap_.mul(10**decimals()).div(1024*1024*1024*1024);
         defaultAdmin = createData.defaultAdmin;
         owner = createData.owner_;
         dfil = IDFIL(createData.dfil_);
@@ -103,37 +102,36 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         tokenExchange = ITokenExchange(createData.tokenExchange_);
         bank = ITokenBankReward(createData.bank_);
         actor = createData.actor_;
-        startTime = block.timestamp;
-        keyEndTime =  startTime + 24*3600;
+        startTime = block.timestamp.add(createData.startTime);
+        keyEndTime =  startTime.add(24*3600);
         nameToken = createData.name_;
         logo = createData.logo_;
-        burnKeyRate = createData.burnKeyRate;
-        burnKeyBase = createData.burnKeyBase;
         costRatePerToken = createData.costRatePerToken;
         costBasePerToken = createData.costBasePerToken;
         profitRatePerToken = createData.profitRatePerToken;
         profitBasePerToken = createData.profitBasePerToken;
-        depositRatePerToken = createData.depositRatePerToken;
-        depositBasePerToken = createData.depositBasePerToken;
+        depositRatePerToken = createData.pledge.mul(10000).div(_cap); // 这样存是为了保证抵押币小于cap时，计算的时候能模拟小数
+        depositBasePerToken = 10000;
         controller = createData.controller;
+        swapFactory = createData.swapFactory;
         callPair = createData.callPair;
         stageType = createData.stageType;
         stageTypeRate = createData.stageTypeRate;
         stageTypeBase = createData.stageTypeBase;
 
         totalAmount = _cap.mul(costRatePerToken).div(costBasePerToken).add(_cap.mul(profitRatePerToken).div(profitBasePerToken)).add(_cap.mul(depositRatePerToken).div(depositBasePerToken));
-        require(totalAmount <= tokenExchange.getAllowAccountUnionAmountTotal(), "Token: Insufficient fil balance");
-       
-        uint256 tmpAmount = totalAmount;
+        uint256 allowAccountUnionAmountTotal = tokenExchange.getAllowAccountUnionAmountTotal();
+        require(totalAmount <= allowAccountUnionAmountTotal, "Token: Insufficient fil balance");
+
         for (uint256 i = 0; i < tokenExchange.getAllowAccountUnionLength(); i++) {
-            if (i < tokenExchange.getAllowAccountUnionLength() - 1) { 
-                tmpAmount = tmpAmount.sub(tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(totalAmount).div(tokenExchange.getAllowAccountUnionAmountTotal()));
-                tokenExchange.FILLOCK(tokenExchange.getAllowAccountUnionAt(i), tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(totalAmount).div(tokenExchange.getAllowAccountUnionAmountTotal()), tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(_cap.mul(costRatePerToken).div(costBasePerToken).add(_cap.mul(profitRatePerToken).div(profitBasePerToken))).div(tokenExchange.getAllowAccountUnionAmountTotal()));
-                accountUnionAmount[tokenExchange.getAllowAccountUnionAt(i)] = tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(totalAmount).div(tokenExchange.getAllowAccountUnionAmountTotal());
-            } else {
-                tokenExchange.FILLOCK(tokenExchange.getAllowAccountUnionAt(i), tmpAmount, tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(_cap.mul(costRatePerToken).div(costBasePerToken).add(_cap.mul(profitRatePerToken).div(profitBasePerToken))).div(tokenExchange.getAllowAccountUnionAmountTotal()));
-                accountUnionAmount[tokenExchange.getAllowAccountUnionAt(i)] = tmpAmount;
-            }
+            accountUnionAmount[tokenExchange.getAllowAccountUnionAt(i)] = tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(totalAmount).div(allowAccountUnionAmountTotal);
+            tokenExchange.FILLOCK(
+                tokenExchange.getAllowAccountUnionAt(i), 
+                tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(_cap.mul(costRatePerToken).div(costBasePerToken)).div(allowAccountUnionAmountTotal), 
+                tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(_cap.mul(profitRatePerToken).div(profitBasePerToken)).div(allowAccountUnionAmountTotal), 
+                tokenExchange.getAllowAccountUnionAmount(tokenExchange.getAllowAccountUnionAt(i)).mul(_cap.mul(depositRatePerToken).div(depositBasePerToken)).div(allowAccountUnionAmountTotal), 
+                true
+            );
 
             _accountUnion.add(tokenExchange.getAllowAccountUnionAt(i));
         }
@@ -144,9 +142,9 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         rewardBase = createData.rewardBase;
         rewardBankRate = createData.rewardBankRate; 
         rewardBankBase = createData.rewardBankBase;
-        // todo 
-        stakeRewardCycle = 86400;
-        // stakeRewardCycle = 604800;
+        stakeRewardCycle = 604800;
+        white[callPair] = true;
+        return true;
     }
 
     /**
@@ -160,7 +158,7 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
      * @dev See {ERC20-_mint}.
      */
     function _mint(address account, uint256 amount) internal override {
-        require(ERC20.totalSupply() + amount <= cap(), "Token: cap exceeded");
+        require(ERC20.totalSupply().add(amount) <= cap(), "Token: cap exceeded");
         super._mint(account, amount);
     }
 
@@ -181,6 +179,13 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
     }
 
     /**
+     * 全部参与联合节点商
+     */
+    function getUnionAccounts() external view returns (address[] memory) {
+        return _accountUnion.values();
+    }
+
+    /**
      * 一级市场交易
      */
     function exchangeToken(uint256 amount) external {
@@ -196,7 +201,7 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         }
 
         if (block.timestamp <= keyEndTime) {
-            key.burnFrom(_msgSender(), amount.mul(costRatePerToken).div(costBasePerToken).add(amount.mul(profitRatePerToken).div(profitBasePerToken)).mul(burnKeyRate).div(burnKeyBase));
+            key.burnFrom(_msgSender(), amount.mul(costRatePerToken).div(costBasePerToken).add(amount.mul(profitRatePerToken).div(profitBasePerToken)));
         }
         
         _users.add(_msgSender());
@@ -221,32 +226,27 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
     /**
      * 节点商提现
      */
-    function ownerUnionWithdraw(uint256 feeOffset) external {
+    function ownerUnionWithdraw() external {
         require(_accountUnion.contains(_msgSender()), "Token: err withdraw owner");
         require(0 < sellAmount.sub(sellAmounts[_msgSender()]), "Token: amount must more than 0");
 
         uint256 tmpSellProfitAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(profitRatePerToken).div(profitBasePerToken);
-        
         sellAmounts[_msgSender()] = sellAmount;
-
-        dfil.approve(address(tokenExchange), tmpSellProfitAmount);
-        tokenExchange.WITHDRAWFIL(owner, tmpSellProfitAmount, feeOffset);
+        dfil.transfer(_msgSender(), tmpSellProfitAmount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
     }
 
     /**
      * 发行商提现
      */
-    function tokenUnionProposerUnionWithdraw(uint256 feeOffset) external {
+    function tokenUnionProposerUnionWithdraw(uint256 usePlatToken) external {
         require(owner == _msgSender(), "Token: err withdraw owner");
         require(0 < sellAmount.sub(sellAmounts[_msgSender()]), "Token: amount must more than 0");
 
-        uint256 tmpSellCostAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(costRatePerToken).div(costBasePerToken);
-        uint256 tmpSellDepositAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(depositRatePerToken).div(depositBasePerToken);
-        
+        uint256 tmpSellTotalAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(costRatePerToken).div(costBasePerToken).add(sellAmount.sub(sellAmounts[_msgSender()]).mul(depositRatePerToken).div(depositBasePerToken));
         sellAmounts[_msgSender()] = sellAmount;
 
-        dfil.approve(address(tokenExchange), tmpSellCostAmount.add(tmpSellDepositAmount));
-        tokenExchange.WITHDRAWFIL(owner, tmpSellCostAmount.add(tmpSellDepositAmount), feeOffset);
+        dfil.approve(address(tokenExchange), tmpSellTotalAmount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
+        tokenExchange.UNIONWITHDRAWFIL(owner, tmpSellTotalAmount, usePlatToken);
     }
 
     /**
@@ -296,12 +296,7 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         }
 
         stageRecords[user] = stageRecords[user].sub(amount);
-
-        if (amount >= dfil.balanceOf(address(this))) {
-            amount = dfil.balanceOf(address(this));
-        }
-        
-        dfil.transfer(user, amount);
+        dfil.transfer(user, amount);  // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
     }
 
     /**
@@ -316,7 +311,7 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         // fil to dfil 质押设置奖励速率和周期，金库设置奖励速率和周期。
         tokenExchange.REWARDFIL2DFIL{value: msg.value.mul(rewardRate).div(rewardBase).add(msg.value.mul(rewardBankRate).div(rewardBankBase))}(owner);
         stake.setRewardRateAndStakingFinishTime(msg.value.mul(rewardRate).div(rewardBase).div(stakeRewardCycle), stakeRewardCycle);
-        rewardAll = rewardAll + msg.value.mul(rewardRate).div(rewardBase);
+        rewardAll = rewardAll.add(msg.value.mul(rewardRate).div(rewardBase));
         dfil.transfer(address(bank), msg.value.mul(rewardBankRate).div(rewardBankBase));
         bank.setCurrentReward(msg.value.mul(rewardBankRate).div(rewardBankBase));
     }
@@ -342,10 +337,10 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         uint256 tmpAll = rewardAll;
         if (amount > tmpAll) {
             rewardAll = 0;
-            dfil.transfer(to, tmpAll);
+            dfil.transfer(to, tmpAll); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
         } else {   
             rewardAll = tmpAll - amount;
-            dfil.transfer(to, amount);
+            dfil.transfer(to, amount); 
         }
     }
 
@@ -353,16 +348,12 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
     function setStake(address stake_) external {
         require(swapFactory == _msgSender(), "Token: must swap factory to set");
         stake = IStake(stake_);
+        white[stake_] = true;
     }
 
     // admin
     function setWhiteEnable(bool enable) external {
         require(hasRole(ADMIN_ROLE, _msgSender()), "Token: must have admin role to set");
         whiteEnable = enable;
-    }
-
-    function setWhite(address account, bool enable) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "Token: must have admin role to set");
-        white[account] = enable;
     }
 }

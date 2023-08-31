@@ -10,8 +10,7 @@ interface ITokenFactory {
         string memory logo,
         address payable owner,
         uint64 actor,
-        uint256 depositRatePerToken,
-        uint256 depositBasePerToken
+        uint256 pledge
     ) external returns (address token);
 
     function createUnionToken(
@@ -19,8 +18,7 @@ interface ITokenFactory {
         string memory name,
         string memory logo,
         uint64 actor,
-        uint256 depositRatePerToken,
-        uint256 depositBasePerToken
+        uint256 pledge
     ) external returns (address token);
 
     function getUserOwnerByAccount(address account) external view returns (address);

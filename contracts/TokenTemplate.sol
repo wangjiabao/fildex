@@ -44,8 +44,6 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
     uint256 public profitBasePerToken;
     uint256 public depositRatePerToken;
     uint256 public depositBasePerToken;
-    uint256 public burnKeyRate;
-    uint256 public burnKeyBase;
 
     uint256 public rewardOwnerRate;
     uint256 public rewardOwnerBase;
@@ -62,6 +60,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
     EnumerableSet.AddressSet private _users;
     EnumerableSet.UintSet private _amounts;
     uint256 public sellAmount;
+    uint256 public withdrawSellAmount;
     uint256 public depositAmount;
 
     address public callPair;
@@ -82,7 +81,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         _disableInitializers();
     }
 
-    function initialize(ITokenTemplate.CreateData calldata createData) initializer public {
+    function initialize(ITokenTemplate.CreateData calldata createData) initializer public returns (bool) {
         require(createData.cap_ > 0, "Token: cap is 0");
 
         _setRoleAdmin(ADMIN_ROLE, SUPER_ADMIN_ROLE);
@@ -90,7 +89,8 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         _grantRole(ADMIN_ROLE, createData.defaultAdmin);
         _grantRole(OWNER_ROLE, createData.owner_);
 
-        _cap = createData.cap_;
+        // 换算1T=1Token
+        _cap = createData.cap_.mul(10**decimals()).div(1024*1024*1024*1024);
         defaultAdmin = createData.defaultAdmin;
         owner = createData.owner_;
         dfil = IDFIL(createData.dfil_);
@@ -98,18 +98,16 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         tokenExchange = ITokenExchange(createData.tokenExchange_);
         bank = ITokenBankReward(createData.bank_);
         actor = createData.actor_;
-        startTime = block.timestamp;
-        keyEndTime =  startTime + 24*3600;
+        startTime = block.timestamp.add(createData.startTime);
+        keyEndTime =  startTime.add(24*3600);
         nameToken = createData.name_;
         logo = createData.logo_;
-        burnKeyRate = createData.burnKeyRate;
-        burnKeyBase = createData.burnKeyBase;
         costRatePerToken = createData.costRatePerToken;
         costBasePerToken = createData.costBasePerToken;
         profitRatePerToken = createData.profitRatePerToken;
         profitBasePerToken = createData.profitBasePerToken;
-        depositRatePerToken = createData.depositRatePerToken;
-        depositBasePerToken = createData.depositBasePerToken;
+        depositRatePerToken = createData.pledge.mul(10000).div(_cap); // 这样存是为了保证抵押币小于cap时，计算的时候能模拟小数
+        depositBasePerToken = 10000;
         controller = createData.controller;
         swapFactory = createData.swapFactory;
         callPair = createData.callPair;
@@ -117,7 +115,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         stageTypeRate = createData.stageTypeRate;
         stageTypeBase = createData.stageTypeBase;
 
-        tokenExchange.FILRECORDANDMINTDFIL(owner, _cap.mul(costRatePerToken).div(costBasePerToken).add(_cap.mul(profitRatePerToken).div(profitBasePerToken)).add(_cap.mul(depositRatePerToken).div(depositBasePerToken)), _cap.mul(costRatePerToken).div(costBasePerToken).add(_cap.mul(profitRatePerToken).div(profitBasePerToken)));
+        tokenExchange.FILLOCK(owner, _cap.mul(costRatePerToken).div(costBasePerToken), _cap.mul(profitRatePerToken).div(profitBasePerToken), _cap.mul(depositRatePerToken).div(depositBasePerToken), false);
 
         rewardOwnerRate = createData.rewardOwnerRate;
         rewardOwnerBase = createData.rewardOwnerBase;
@@ -125,9 +123,9 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         rewardBase = createData.rewardBase;
         rewardBankRate = createData.rewardBankRate; 
         rewardBankBase = createData.rewardBankBase;
-        // todo 
-        stakeRewardCycle = 86400;
-        // stakeRewardCycle = 604800;
+        stakeRewardCycle = 604800;
+        white[callPair] = true;
+        return true;
     }
 
     /**
@@ -141,7 +139,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
      * @dev See {ERC20-_mint}.
      */
     function _mint(address account, uint256 amount) internal override {
-        require(ERC20.totalSupply() + amount <= cap(), "Token: cap exceeded");
+        require(ERC20.totalSupply().add(amount) <= cap(), "Token: cap exceeded");
         super._mint(account, amount);
     }
 
@@ -170,7 +168,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         }
         
         if (block.timestamp <= keyEndTime) {
-            key.burnFrom(_msgSender(), amount.mul(costRatePerToken).div(costBasePerToken).add(amount.mul(profitRatePerToken).div(profitBasePerToken)).mul(burnKeyRate).div(burnKeyBase));
+            key.burnFrom(_msgSender(), amount.mul(costRatePerToken).div(costBasePerToken).add(amount.mul(profitRatePerToken).div(profitBasePerToken)));
         }
         
         _users.add(_msgSender());
@@ -195,17 +193,13 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
     /**
      * 节点商提现
      */
-    function ownerWithdraw(uint256 feeOffset) external {
+    function ownerWithdraw() external {
         require(owner == _msgSender(), "Token: must owner");
-        require(0 < sellAmount, "Token: amount must more than 0");
+        require(0 < sellAmount.sub(withdrawSellAmount), "Token: amount must more than 0");
 
-        uint256 tmpSellCostAmount = sellAmount.mul(costRatePerToken).div(costBasePerToken);
-        uint256 tmpSellProfitAmount = sellAmount.mul(profitRatePerToken).div(profitBasePerToken);
-        
-        sellAmount = 0;
-
-        dfil.approve(address(tokenExchange), tmpSellCostAmount.add(tmpSellProfitAmount));
-        tokenExchange.WITHDRAWFIL(owner, tmpSellCostAmount.add(tmpSellProfitAmount), feeOffset);
+        uint256 tmp = sellAmount.sub(withdrawSellAmount);
+        withdrawSellAmount = sellAmount;
+        dfil.transfer(_msgSender(), tmp.mul(costRatePerToken).div(costBasePerToken).add(tmp.mul(profitRatePerToken).div(profitBasePerToken))); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
     }
 
     /**
@@ -254,13 +248,8 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
             amount = stageRecords[user];
         }
 
-        stageRecords[user] = stageRecords[user].sub(amount);
-
-        if (amount >= dfil.balanceOf(address(this))) {
-            amount = dfil.balanceOf(address(this));
-        }
-        
-        dfil.transfer(user, amount);
+        stageRecords[user] = stageRecords[user].sub(amount);  
+        dfil.transfer(user, amount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
     }
 
     /**
@@ -275,7 +264,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         // fil to dfil 质押设置奖励速率和周期，金库设置奖励速率和周期。
         tokenExchange.REWARDFIL2DFIL{value: msg.value.mul(rewardRate).div(rewardBase).add(msg.value.mul(rewardBankRate).div(rewardBankBase))}(owner);
         stake.setRewardRateAndStakingFinishTime(msg.value.mul(rewardRate).div(rewardBase).div(stakeRewardCycle), stakeRewardCycle);
-        rewardAll = rewardAll + msg.value.mul(rewardRate).div(rewardBase);
+        rewardAll = rewardAll.add(msg.value.mul(rewardRate).div(rewardBase));
         dfil.transfer(address(bank), msg.value.mul(rewardBankRate).div(rewardBankBase));
         bank.setCurrentReward(msg.value.mul(rewardBankRate).div(rewardBankBase));
     }
@@ -302,7 +291,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
             dfil.transfer(to, tmpAll);
         } else {   
             rewardAll = tmpAll - amount;
-            dfil.transfer(to, amount);
+            dfil.transfer(to, amount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
         }
     }
 
@@ -310,6 +299,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
     function setStake(address stake_) external {
         require(swapFactory == _msgSender(), "Token: must swap factory to set");
         stake = IStake(stake_);
+        white[stake_] = true;
     }
 
     // admin

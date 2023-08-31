@@ -7,7 +7,6 @@ import './SwapERC20.sol';
 import './libraries/Math.sol';
 import './libraries/UQ112x112.sol';
 import './interfaces/IERC20.sol';
-import './interfaces/ISwapFactory.sol';
 import './interfaces/ISwapCallee.sol';
 
 contract SwapPair is ISwapPair, SwapERC20 {
@@ -251,8 +250,10 @@ contract SwapPair is ISwapPair, SwapERC20 {
      */
     function setRewardRateAndStakingFinishTime(uint256 rewardRate_, uint256 stakingTime_) external {
         require(address(rewardPool) == msg.sender, "Swap: must reward pool");
-
+    
         rewardPerTokenStored = rewardUNIPerToken();
+
+        stakingFinishTime = block.timestamp; // init
         lastUpdateTime = getLastTime();
 
         rewardRate = rewardRate_;

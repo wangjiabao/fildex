@@ -4,6 +4,7 @@ pragma solidity ^0.8.19;
 interface ITokenTemplate {
    
     struct CreateData {
+        uint256 startTime;
         uint256 cap_;
         string name_;
         string logo_;
@@ -15,14 +16,11 @@ interface ITokenTemplate {
         address superAdmin;
         address defaultAdmin;
         address payable owner_;
-        uint256 burnKeyRate;
-        uint256 burnKeyBase;
         uint256 costRatePerToken;
         uint256 costBasePerToken;
         uint256 profitRatePerToken;
         uint256 profitBasePerToken;
-        uint256 depositRatePerToken;
-        uint256 depositBasePerToken;
+        uint256 pledge;
         address controller;
         address swapFactory;
         address callPair;
@@ -37,7 +35,7 @@ interface ITokenTemplate {
         uint256 rewardBankBase;
     }
 
-    function initialize(CreateData memory data) external;
+    function initialize(CreateData memory data) external returns (bool);
 
     function depositFilIn() external payable;
 

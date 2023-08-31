@@ -24,32 +24,32 @@ contract SwapRouter is ISwapRouter {
     uint public feeRate = 8;
     uint public feeBase = 1000;
     IPlatToken public platToken;
-    uint public bRate = 1;
-    uint public bBase = 1;
 
     modifier ensure(uint deadline) {
         require(deadline >= block.timestamp, 'SwapRouter: EXPIRED');
         _;
     }
 
-    constructor(address _factory, address _superAdmin, address _platTokenSetter, address _dfil, address _tokenFactory, address _feeTo) public {
+    constructor(address _factory, address _superAdmin, address _dfil, address _tokenFactory, address _feeTo) public {
         factory = _factory;        
         superAdmin = _superAdmin;
         dfil = _dfil;
         tokenFactory = _tokenFactory;
         feeTo = _feeTo;
-        platTokenSetter = _platTokenSetter;
-    }
-
-    // platTokenSetter
-    function setPlatTokenSetter(address _platTokenSetter) external {
-        require(msg.sender == platTokenSetter, "err");
-        platTokenSetter = _platTokenSetter;
+        platTokenSetter = _superAdmin;
     }
 
     function setPlatToken(address platToken_) external {
         require(msg.sender == platTokenSetter, "err");
         platToken = IPlatToken(platToken_);
+    }
+
+    // feeTo
+    function feeToWithdraw(address token) external {
+        require(msg.sender == feeTo, "err");
+        TransferHelper.safeTransfer(
+            token, feeTo, IERC20(token).balanceOf(address(this))
+        );
     }
 
     // superAdmin
@@ -61,12 +61,6 @@ contract SwapRouter is ISwapRouter {
     function setFee(uint _feeRate) external {
         require(msg.sender == superAdmin, "err");
         feeRate =  _feeRate;
-    }
-
-    function setBRateAndBase(uint rate_, uint base_) external {
-        require(msg.sender == superAdmin, "err");
-        bRate = rate_;
-        bBase = base_;
     }
 
     /**
@@ -217,29 +211,16 @@ contract SwapRouter is ISwapRouter {
     function swapExactTokensForTokens(
         uint amountIn,
         uint amountOutMin,
-        uint feeOffset,
+        uint usePlatToken,
         address[] calldata path,
         address to,
         uint deadline
     ) external virtual override ensure(deadline) returns (uint[] memory amounts) {
+        require(2 == path.length, 'SwapRouter: ERROR_PATH');
         amounts = SwapLibrary.getAmountsOut(factory, amountIn, path);
         require(amounts[amounts.length - 1] >= amountOutMin, 'SwapRouter: INSUFFICIENT_OUTPUT_AMOUNT');
         
-        // fee
-        uint fee = amounts[0].mul(feeRate).div(feeBase);
-        if (address(0) != address(platToken) && bBase > 0 && feeOffset > bBase) {
-            require(fee >= feeOffset, "SwapRouter: fee must more than b fee");
-            uint feeB = feeOffset.mul(bRate).div(bBase);
-            if (feeB > 0) {
-                platToken.burnFrom(msg.sender, feeB);
-            }
-            fee = fee.sub(feeOffset);
-        }
-        if (fee > 0) {
-            TransferHelper.safeTransferFrom(
-                path[0], msg.sender, feeTo, fee
-            );
-        }
+        _swapFee(amounts[0], path[0], usePlatToken);
 
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, SwapLibrary.pairFor(factory, path[0], path[1]), amounts[0]
@@ -250,29 +231,16 @@ contract SwapRouter is ISwapRouter {
     function swapTokensForExactTokens(
         uint amountOut,
         uint amountInMax,
-        uint feeOffset,
+        uint usePlatToken,
         address[] calldata path,
         address to,
         uint deadline
     ) external virtual override ensure(deadline) returns (uint[] memory amounts) {
+        require(2 == path.length, 'SwapRouter: ERROR_PATH');
         amounts = SwapLibrary.getAmountsIn(factory, amountOut, path);
         require(amounts[0] <= amountInMax, 'SwapRouter: EXCESSIVE_INPUT_AMOUNT');
 
-        // fee
-        uint fee = amounts[0].mul(feeRate).div(feeBase);
-        if (address(0) != address(platToken) && bBase > 0 && feeOffset > bBase) {
-            require(fee >= feeOffset, "SwapRouter: fee must more than b fee");
-            uint feeB = feeOffset.mul(bRate).div(bBase);
-            if (feeB > 0) {
-                platToken.burnFrom(msg.sender, feeB);
-            }
-            fee = fee.sub(feeOffset);
-        }
-        if (fee > 0) {
-            TransferHelper.safeTransferFrom(
-                path[0], msg.sender, feeTo, fee
-            );
-        }
+        _swapFee(amounts[0], path[0], usePlatToken);
 
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, SwapLibrary.pairFor(factory, path[0], path[1]), amounts[0]
@@ -304,26 +272,13 @@ contract SwapRouter is ISwapRouter {
     function swapExactTokensForTokensSupportingFeeOnTransferTokens(
         uint amountIn,
         uint amountOutMin,
-        uint feeOffset,
+        uint usePlatToken,
         address[] calldata path,
         address to,
         uint deadline
     ) external virtual override ensure(deadline) {
-        // fee
-        uint fee = amountIn.mul(feeRate).div(feeBase);
-        if (address(0) != address(platToken) && bBase > 0 && feeOffset > bBase) {
-            require(fee >= feeOffset, "SwapRouter: fee must more than b fee");
-            uint feeB = feeOffset.mul(bRate).div(bBase);
-            if (feeB > 0) {
-                platToken.burnFrom(msg.sender, feeB);
-            }
-            fee = fee.sub(feeOffset);
-        }
-        if (fee > 0) {
-            TransferHelper.safeTransferFrom(
-                path[0], msg.sender, feeTo, fee
-            );
-        }
+        require(2 == path.length, 'SwapRouter: ERROR_PATH');
+        _swapFee(amountIn, path[0], usePlatToken);
 
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, SwapLibrary.pairFor(factory, path[0], path[1]), amountIn
@@ -334,6 +289,21 @@ contract SwapRouter is ISwapRouter {
             IERC20(path[path.length - 1]).balanceOf(to).sub(balanceBefore) >= amountOutMin,
             'SwapRouter: INSUFFICIENT_OUTPUT_AMOUNT'
         );
+    }
+
+    function _swapFee(uint amount, address token, uint usePlatToken) internal {
+        // fee
+        uint fee = amount.mul(feeRate).div(feeBase);
+        if (fee > 0) {
+            if (address(0) != address(platToken) && 0 < usePlatToken) {
+                platToken.deal(fee);
+            } else {
+                // 兼容白名单
+                TransferHelper.safeTransferFrom(
+                    token, msg.sender, address(this), fee
+                );
+            }
+        }
     }
 
     // **** LIBRARY FUNCTIONS ****

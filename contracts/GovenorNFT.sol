@@ -51,7 +51,7 @@ contract GovenorNFT is AccessControlEnumerable, ERC721, EIP712,  ERC721Votes {
 
     function exchange(uint256 amount) public {
         require(start <= block.timestamp, "GovenorNFT: not open");
-        require(amount.mul(100) >= key.totalSupply(), "GovenorNFT: amount not enough");
+        require(amount >= key.totalSupply().div(100), "GovenorNFT: amount not enough");
 
         if (!init) {
             _init();

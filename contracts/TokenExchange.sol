@@ -29,6 +29,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     address public dao;
     address payable public manager;
     uint256 public managerAmount;
+    bool public withdrawAndDeleteManagerStatus = false;
 
     ITokenFactory public factory;
     IDFIL public dfil;
@@ -36,10 +37,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
 
     uint256 public rate = 2;
     uint256 public base = 1000;
-    uint256 public bRate = 1;
-    uint256 public bBase = 1;
     address payable public feeTo;
-    uint256 public allFee;
 
     bool public exchangeEnableNoLimit;
     mapping(address => int256) public tokenOwnerFilIn;
@@ -56,16 +54,14 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
 
     event FIL2DFILExchanged(address indexed user, uint256 amount);
     event REWARDFIL2DFILExchanged(address indexed token, address owner, uint256 amount);
-    event EXCHANGEOWNERFILComplated(address indexed token, address owner, uint256 sellCostAmount, uint256 sellProfitAmount);
-    event WITHDRAWFILComplated(address indexed token, address owner, uint256 amount, uint256 feeOffset);
     event FILINComplated(address indexed token, address owner, uint256 amount);
-    event DFIL2FILExchanged(address indexed user, uint256 amount, uint256 relAmount, uint256 fee);
-    event FILLOCKComplated(address indexed token, address owner, uint256 amount, uint256 sellAmount);
-    event FILRECORDComplated(address indexed token, address owner, uint256 amount, uint256 sellAmount);
+    event DFIL2FILExchanged(address indexed user, uint256 amount, uint256 relAmount, uint256 fee, uint256 usePlatToken);
+    event FILLOCKComplated(address indexed token, address owner, uint256 costAmount, uint256 profitRateAmount, uint256 depositAmount, bool union);
     event feeToWithdrawComplated(address indexed feeTo, uint256 amount);
     event AccountCreated(address indexed user, uint256 rate);
     event AccountRemoved(address indexed user);
     event ManagerWithdrawForFilComplated(address indexed manager, uint amount);
+    event WITHDRAWFILComplated(address indexed token, address owner, uint256 amount, uint256 usePlatToken);
 
     modifier onlyDefaultAdminRole() {
         require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenExchange: must have default admin role to set");
@@ -127,10 +123,9 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     /**
      * fil出，更新节点商流动性，平台币抵消手续费
      */
-    function DFIL2FIL(uint256 amount, uint256 feeOffset) external nonReentrant {
+    function DFIL2FIL(uint256 amount, uint256 usePlatToken) external nonReentrant {
         require(address(0) != factory.getUserOwnerByAccount(_msgSender()), "TokenExchange: not exists user");
         require(amount >= base, "TokenExchange: amount must more");
-        require(address(this).balance >= amount, "TokenExchange: Insufficient balance");
 
         if (!factory.existsOwner(factory.getUserOwnerByAccount(_msgSender()))) {
             tokenOwnerFilOut[factory.getTop()] = tokenOwnerFilOut[factory.getTop()] + amount.toInt256();
@@ -142,7 +137,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         tokenOwnerFilBalance[factory.getUserOwnerByAccount(_msgSender())] = tokenOwnerFilBalance[factory.getUserOwnerByAccount(_msgSender())] - amount.toInt256();
         tokenOwnerDfilBalance[factory.getUserOwnerByAccount(_msgSender())] = tokenOwnerDfilBalance[factory.getUserOwnerByAccount(_msgSender())] - amount.toInt256();
         
-        if (exchangeEnableNoLimit) {
+        if (!exchangeEnableNoLimit) {
             if (factory.existsOwner(factory.getUserOwnerByAccount(_msgSender()))) {
                 require(0 <= tokenOwnerFilBalance[factory.getUserOwnerByAccount(_msgSender())], "TokenExchange: Insufficient available credit limit");
             } else {
@@ -151,30 +146,28 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         }
 
         uint256 fee = amount.mul(rate).div(base);
-        if (feeOffset > bBase && address(0) != address(platToken)) {
-            require(fee >= feeOffset, "TokenExchange: fee must more than b fee");
-            
-            uint256 feeB = feeOffset.mul(bRate).div(bBase);
-            if (feeB > 0) {
-                platToken.burnFrom(_msgSender(), feeB);
-            }
-            fee = fee.sub(feeOffset);
-        }
-
         if (fee > 0) {
-            allFee = allFee.add(fee);
-            dfil.transferFrom(_msgSender(), address(this), fee);
+            if (address(0) != address(platToken) && 0 < usePlatToken) {
+                platToken.deal(fee);
+            } else {
+                dfil.transferFrom(_msgSender(), address(this), fee);
+            }
         }
 
         dfil.burnFrom(_msgSender(), amount.sub(fee));
-        if (address(this).balance < amount.sub(fee)) {
-            require(callManagerForFil(amount.sub(fee).sub(address(this).balance)), "TokenExchange: fil not enough");
+        if (!callManagerForFil(amount.sub(fee))) {
+            payable(_msgSender()).transfer(amount.sub(fee));
         }
-        payable(_msgSender()).transfer(amount.sub(fee));
+
+        // 如果有理财，主动送出
+        if (address(0) != manager) {
+            managerAmount = managerAmount.add(address(this).balance);
+            IManager(manager).pay{value: address(this).balance}();
+        }
 
         checkIfAllowAndSetAccountUnionWithAmount(factory.getUserOwnerByAccount(_msgSender()));
 
-        emit DFIL2FILExchanged(_msgSender(), amount, amount.sub(fee), fee);
+        emit DFIL2FILExchanged(_msgSender(), amount, amount.sub(fee), fee, usePlatToken);
     }
 
     /**
@@ -196,69 +189,43 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     /**
      * 算力合约调用，联合算力发售，更新节点商流动性，并判断是否额度够用异常返回
      */
-    function FILLOCK(address owner, uint256 amount, uint256 sellAmount) external {
+    function FILLOCK(address owner, uint256 costAmount, uint256 profitRateAmount, uint256 depositAmount, bool union) external {
         require(hasRole(TOKEN_ROLE, _msgSender()), "TokenExchange: must have token role to in");
         require(factory.existsOwner(factory.getUserOwnerByAccount(owner)), "TokenExchange: not owner");
+        if (union) {
+            tokenOwnerFilBalance[owner] = tokenOwnerFilBalance[owner] - costAmount.add(depositAmount).toInt256();
+            checkIfAllowAndSetAccountUnionWithAmount(owner);
+        } else {
+            tokenOwnerDfilBalance[owner] = tokenOwnerDfilBalance[owner] + depositAmount.toInt256();
+            dfil.mint(owner, depositAmount); // 非联合时先增发抵押币部分dfil的给节点商，售卖算力时不会再增发。
+        }
 
-        tokenOwnerFilOut[owner] = tokenOwnerFilOut[owner] + amount.toInt256();
-        tokenOwnerFilBalance[owner] = tokenOwnerFilBalance[owner] - amount.toInt256();
-        tokenOwnerDfilBalance[owner] = tokenOwnerDfilBalance[owner] - sellAmount.toInt256();
-        require(exchangeEnableNoLimit || 0 <= tokenOwnerFilBalance[owner], "TokenExchange: Insufficient fil balance");
-
-        checkIfAllowAndSetAccountUnionWithAmount(owner);
-
-        emit FILLOCKComplated(_msgSender(), owner, amount, sellAmount);
+        emit FILLOCKComplated(_msgSender(), owner, costAmount, profitRateAmount, depositAmount, union);
     }
 
     /**
-     * 算力合约调用，独立算力发售，更新节点商流动性
+     * 算力合约调用，联合发售，提现节点商售卖金额/提现发行商售卖金额，平台币抵消手续费
      */
-    function FILRECORDANDMINTDFIL(address owner, uint256 amount, uint256 sellAmount) external {
-        require(hasRole(TOKEN_ROLE, _msgSender()), "TokenExchange: must have token role to in");
-        require(factory.existsOwner(factory.getUserOwnerByAccount(owner)), "TokenExchange: not owner");
-        require(amount >= sellAmount, "TokenExchange: amount err");
-
-        tokenOwnerFilBalance[owner] = tokenOwnerFilBalance[owner] - amount.toInt256();
-        tokenOwnerDfilBalance[owner] = tokenOwnerDfilBalance[owner] - sellAmount.toInt256();
-        dfil.mint(owner, amount.sub(sellAmount));
-
-        checkIfAllowAndSetAccountUnionWithAmount(owner);
-
-        emit FILRECORDComplated(_msgSender(), owner, amount, sellAmount);
-    }
-
-    /**
-     * 算力合约调用，独立发售/联合发售，提现节点商售卖金额/提现发行商售卖金额，平台币抵消手续费
-     */
-    function WITHDRAWFIL(address payable owner, uint256 amount, uint256 feeOffset) external nonReentrant {
+    function UNIONWITHDRAWFIL(address payable owner, uint256 amount, uint256 usePlatToken) external nonReentrant {
         require(hasRole(TOKEN_ROLE, _msgSender()), "TokenExchange: must have token role");
         require(factory.existsOwner(factory.getUserOwnerByAccount(owner)), "TokenExchange: not owner");
         require(0 < amount, "TokenExchange: amount must more than 0");
 
         uint256 fee = amount.mul(rate).div(base);
-        if (feeOffset > bBase && address(0) != address(platToken)) {
-            require(fee >= feeOffset, "TokenExchange: fee must more than b fee");
-            
-            uint256 feeB = feeOffset.mul(bRate).div(bBase);
-            if (feeB > 0) {
-                platToken.burnFrom(_msgSender(), feeB);
-            }
-
-            fee = fee.sub(feeOffset);
-        }
-
         if (fee > 0) {
-            allFee = allFee.add(fee);
-            dfil.transferFrom(_msgSender(), address(this), fee);
+            if (address(0) != address(platToken) && 0 < usePlatToken) {
+                platToken.deal(fee);
+            } else {
+                dfil.transferFrom(_msgSender(), address(this), fee);
+            }
         }
 
         dfil.burnFrom(_msgSender(), amount.sub(fee));
-        if (address(this).balance < amount.sub(fee)) {
-            require(callManagerForFil(amount.sub(fee).sub(address(this).balance)), "TokenExchange: fil not enough");
+        if (!callManagerForFil(amount.sub(fee))) {
+            owner.transfer(amount.sub(fee));
         }
-        owner.transfer(amount.sub(fee));
 
-        emit WITHDRAWFILComplated(_msgSender(), owner, amount, feeOffset);
+        emit WITHDRAWFILComplated(_msgSender(), owner, amount, usePlatToken);
     }
 
     /**
@@ -341,16 +308,15 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         }
 
         if (
-            tokenOwnerDfilBalance[owner] > 0 
-            && tokenOwnerFilBalance[owner] > 0
-            && tokenOwnerDfilBalance[owner].toUint256().mul(unionRate).div(unionBase) < tokenOwnerFilBalance[owner].toUint256()
-            && tokenOwnerDfilBalance[owner].toUint256().mul(accountUnionRate[owner]).div(unionBase) < tokenOwnerFilBalance[owner].toUint256()
+            tokenOwnerFilBalance[owner] > 0 && 
+            tokenOwnerFilBalance[owner].toUint256().mul(unionRate).div(unionBase) < tokenOwnerFilBalance[owner].toUint256() && 
+            tokenOwnerFilBalance[owner].toUint256().mul(accountUnionRate[owner]).div(unionBase) < tokenOwnerFilBalance[owner].toUint256()
         ) {
             if (!_allowAccountUnion.contains(owner)) {
                 _allowAccountUnion.add(owner);
             }
             
-            allowAccountUnionAmount[owner] = tokenOwnerFilBalance[owner].toUint256().sub(tokenOwnerDfilBalance[owner].toUint256().mul(accountUnionRate[owner]).div(unionBase));
+            allowAccountUnionAmount[owner] = tokenOwnerFilBalance[owner].toUint256().sub(tokenOwnerFilBalance[owner].toUint256().mul(accountUnionRate[owner]).div(unionBase));
         } else if (_allowAccountUnion.contains(owner)) {
             _allowAccountUnion.remove(owner);
             delete allowAccountUnionAmount[owner];
@@ -403,19 +369,17 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     }
 
     /**
-     * 节点商提现
+     * 手续费提现
      */
     function feeToWithdraw() external nonReentrant {
         require(feeTo == _msgSender(), "TokenExchange: not feeTo");
-        require(0 < allFee, "TokenExchange: fee not enough");
 
-        uint256 tmpAllFee = allFee;
-        allFee = 0;
+        uint256 tmpAllFee = dfil.balanceOf(address(this));
         dfil.burn(tmpAllFee);
-        if (address(this).balance < tmpAllFee) {
-            require(callManagerForFil(tmpAllFee.sub(address(this).balance)), "TokenExchange: fil not enough");
+
+        if (!callManagerForFil(tmpAllFee)) {
+            feeTo.transfer(tmpAllFee);
         }
-        feeTo.transfer(tmpAllFee);
 
         emit feeToWithdrawComplated(feeTo, tmpAllFee);
     }
@@ -424,7 +388,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
      * 理财提现
      */
     function managerWithdrawForFil(uint256 amount) external nonReentrant {
-        require(manager == _msgSender(), "TokenExchange: not manager");
+        require(address(0) != manager && manager == _msgSender(), "TokenExchange: not manager");
         require(address(this).balance >= amount, "TokenExchange: not enough");
 
         managerAmount = managerAmount.add(amount);
@@ -451,7 +415,26 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
             return true;
         }
 
+        managerAmount = managerAmount.sub(address(this).balance.sub(balanceFil));
         return false;
+    }
+
+    /**
+     * 从理财处取得指定金额的fil，并删除理财信息
+     */
+    function withdrawAndDeleteManager(uint256 managerAmount_) external {
+        require(withdrawAndDeleteManagerStatus, "TokenExchange: status err");
+
+        uint256 tmpAmount = managerAmount;
+        if (0 < managerAmount_) {
+            tmpAmount = managerAmount_;
+            require(tmpAmount <= managerAmount, "TokenExchange: manager amount err");
+        }
+
+        require(callManagerForFil(tmpAmount), "TokenExchange: call manager for fil err");
+        if (0 == managerAmount) {
+            manager = payable(address(0));
+        }
     }
 
     // dao
@@ -461,11 +444,9 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         manager = manager_;
     }
 
-    function withdrawAndDeleteManager() external {
+    function setWithdrawAndDeleteManagerStatus() external {
         require(dao == _msgSender(), "TokenExchange: not dao");
-        callManagerForFil(managerAmount);
-        manager = payable(address(0));
-        managerAmount = 0;
+        withdrawAndDeleteManagerStatus = true;
     }
 
     // tokenFactory
@@ -483,15 +464,12 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         feeTo = feeTo_;
     }
 
-    function setAllUserExchangeEnable(bool enable) external onlySuperAdminRole {
-        exchangeEnableNoLimit = enable;
+    function setAllUserExchangeEnable() external onlySuperAdminRole {
+        exchangeEnableNoLimit = true;
     }
 
-    function setPlatTokenAndRateAndBase(address platToken_, uint256 rate_, uint256 base_) external onlySuperAdminRole {
-        require(base_ > 0, "TokenExchange: base err");
+    function setPlatToken(address platToken_) external onlySuperAdminRole {
         platToken = IPlatToken(platToken_);
-        bRate = rate_;
-        bBase = base_;
     }
 
     // default admin

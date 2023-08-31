@@ -25,13 +25,7 @@ contract TokenBankRewardKey is AccessControlEnumerable {
     uint256 public rewardRate;
 
     uint256 public startTime;
-
-    // todo
-    uint256 public stakeCycleTime = 86400;
-    // uint256 public stakeCycleTime = 2592000;
-    // 模拟小数，提升可扩展性
-    uint256 public stakeCycleRate = 100;
-    uint256 public stakeCycleBase = 100;
+    uint256 public stakeCycleTime = 2592000;
 
     uint256 public total;
 
@@ -130,21 +124,17 @@ contract TokenBankRewardKey is AccessControlEnumerable {
         require(bank == _msgSender(), "TokenBank: must bank to reward");
 
         uint256 stakingRewards = 0;
-        uint256 time = block.timestamp;
         for (uint256 i = 0; i < userBalanceRecord[account].length; i++) {
-            time = userBalanceRecordTime[account][i];
-            if (block.timestamp.sub(time) >= stakeCycleTime.mul(4)) {
-                stakingRewards = stakingRewards.add(rewards[account][i].mul(5).mul(stakeCycleRate).div(stakeCycleBase));
-            } else if (block.timestamp.sub(time) >= stakeCycleTime.mul(3)) {
-                stakingRewards = stakingRewards.add(rewards[account][i].mul(4).mul(stakeCycleRate).div(stakeCycleBase));
-            } else if (block.timestamp.sub(time) >= stakeCycleTime.mul(2)) {
-                stakingRewards = stakingRewards.add(rewards[account][i].mul(3).mul(stakeCycleRate).div(stakeCycleBase));
-            } else if (block.timestamp.sub(time) >= stakeCycleTime.mul(1)) {
-                stakingRewards = stakingRewards.add(rewards[account][i].mul(2).mul(stakeCycleRate).div(stakeCycleBase));
-            } else {
-                stakingRewards = stakingRewards.add(rewards[account][i].mul(1).mul(stakeCycleRate).div(stakeCycleBase));
+            if (0 >= userBalanceRecord[account][i] || 0 >= userBalanceRecordTime[account][i]) {
+                continue;
             }
 
+            if (5 > block.timestamp.sub(userBalanceRecordTime[account][i]).add(stakeCycleTime).div(stakeCycleTime)){
+                stakingRewards = stakingRewards.add(rewards[account][i].mul(block.timestamp.sub(userBalanceRecordTime[account][i]).add(stakeCycleTime)).div(stakeCycleTime));
+            } else {
+                stakingRewards = stakingRewards.add(rewards[account][i].mul(5));
+            }
+            
             rewards[account][i] = 0;
         }
         
@@ -172,22 +162,20 @@ contract TokenBankRewardKey is AccessControlEnumerable {
     }
 
     // super admin
-    function setRewardRateAndStakingFinishTime(uint256 rewardRate_, uint256 stakingTime_) external {
+    function setRewardRateAndStakingFinishTime(uint256 rewardRate_, uint256 stakingFinishTime_) external {
         require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "TokenBank: must have super admin role to set");
+        require(stakingFinishTime_ > block.timestamp, "TokenBank: time err");
 
         rewardPerTokenStored = rewardUNIPerToken();
+        
+        stakingFinishTime = block.timestamp;
         lastUpdateTime = getLastTime();
 
         rewardRate = rewardRate_;
-        stakingFinishTime = stakingFinishTime.add(stakingTime_);
+        stakingFinishTime = stakingFinishTime_;
 
         _historyRewardRate.add(rewardRate_);
-        _historyStakingTime.add(stakingTime_);
-    }
-
-    function setStakeCycleRate(uint256 rate) external {
-        require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "TokenBank: must have super admin role to set");
-        stakeCycleRate = rate;
+        _historyStakingTime.add(stakingFinishTime_);
     }
 
     // default admin 

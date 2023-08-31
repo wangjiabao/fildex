@@ -25,6 +25,7 @@ contract TokenFactory is AccessControlEnumerable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
+    bytes32 public constant CALL_PAIR_SETTER_ROLE = keccak256("CALL_PAIR_SETTER_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant CREATE_TOKEN_ROLE = keccak256("CREATE_TOKEN_ROLE");
 
@@ -32,6 +33,7 @@ contract TokenFactory is AccessControlEnumerable {
 
     address public superAdmin;
     address public defaultAdmin;
+    uint256 public idoStartTime = 5*24*3600;
 
     IDFIL public dfil;
     IKey public key;
@@ -43,9 +45,6 @@ contract TokenFactory is AccessControlEnumerable {
     address public tokenUnionTemplate;
     address public swapFactory;
     address public callPair;
-
-    uint256 burnKeyRate;
-    uint256 burnKeyBase;
 
     // 用户的集合
     address payable public top;
@@ -96,7 +95,12 @@ contract TokenFactory is AccessControlEnumerable {
     }
 
     modifier onlyAdminRole() {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to remove");
+        require(hasRole(ADMIN_ROLE, _msgSender()), "TokenFactory: must have admin role to set");
+        _;
+    }
+
+    modifier onlyCallPairSetterRole() {
+        require(hasRole(CALL_PAIR_SETTER_ROLE, _msgSender()), "TokenFactory: must have call pair setter role to set");
         _;
     }
 
@@ -116,6 +120,7 @@ contract TokenFactory is AccessControlEnumerable {
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _grantRole(SUPER_ADMIN_ROLE, _msgSender());
         _grantRole(ADMIN_ROLE, _msgSender());
+        _grantRole(CALL_PAIR_SETTER_ROLE, _msgSender());
 
         superAdmin = _msgSender();
         defaultAdminRoleLimit = defaultAdminRoleLimit_;
@@ -310,7 +315,7 @@ contract TokenFactory is AccessControlEnumerable {
         filecoinMiner = filecoinMinerTemplate.clone();
         require(address(0) != filecoinMiner, "TokenFactory: invalid token address");
 
-        IFilecoinMinerControllerTemplate(filecoinControllerMiner).initialize(IFilecoinMinerControllerTemplate.CreateData(
+        require(IFilecoinMinerControllerTemplate(filecoinControllerMiner).initialize(IFilecoinMinerControllerTemplate.CreateData(
             superAdmin,
             _msgSender(),
             createControllerData.owner,
@@ -321,8 +326,9 @@ contract TokenFactory is AccessControlEnumerable {
             createControllerData.union,
             tmpTimeType,
             createControllerData.extraTime
-        ));
-        IFilecoinMinerTemplate(filecoinMiner).initialize(createControllerData.actor, payable(filecoinControllerMiner));
+        )), "TokenFactory: init err");
+
+        require(IFilecoinMinerTemplate(filecoinMiner).initialize(createControllerData.actor, payable(filecoinControllerMiner)), "TokenFactory: init err");
 
         _grantRole(CREATE_TOKEN_ROLE, filecoinControllerMiner);
         ownerActorCurrentControllers[createControllerData.owner][createControllerData.actor] = filecoinControllerMiner;
@@ -333,6 +339,8 @@ contract TokenFactory is AccessControlEnumerable {
         } else if (2 == createControllerData.stakeType) {
             stakeType = 2;
         }
+
+        require(1 == createControllerData.rewardRate.add(createControllerData.rewardOwnerRate).add(createControllerData.rewardBankRate).div(createControllerData.rewardBase), "TokenFactory: reward rate err");
 
         if (createControllerData.union) {
             controllerCheckData[filecoinControllerMiner] = IFilecoinMinerControllerTemplate.CheckData(
@@ -386,8 +394,7 @@ contract TokenFactory is AccessControlEnumerable {
         string memory logo,
         address payable owner,
         uint64 actor,
-        uint256 depositRatePerToken,
-        uint256 depositBasePerToken
+        uint256 pledge
     ) external returns (address token) {
         require(hasRole(CREATE_TOKEN_ROLE, _msgSender()), "TokenFactory: must have create token role to create");
         require(_owners.contains(owner), "TokenFactory: not exists owner");
@@ -404,8 +411,9 @@ contract TokenFactory is AccessControlEnumerable {
         key.setBurner(token);
         bankRewardDfil.setRewarder(token);
 
-        ITokenTemplate(token).initialize(
+        require(ITokenTemplate(token).initialize(
             ITokenTemplate.CreateData(
+                idoStartTime,
                 cap,
                 name,
                 logo,
@@ -417,14 +425,11 @@ contract TokenFactory is AccessControlEnumerable {
                 superAdmin,
                 defaultAdmin,
                 owner,
-                burnKeyRate,
-                burnKeyBase,
                 controllerCheckData[_msgSender()].costRatePerToken,
                 controllerCheckData[_msgSender()].costBasePerToken,
                 controllerCheckData[_msgSender()].profitRatePerToken,
                 controllerCheckData[_msgSender()].profitBasePerToken,
-                depositRatePerToken,
-                depositBasePerToken,
+                pledge,
                 _msgSender(),
                 swapFactory,
                 callPair,
@@ -438,7 +443,7 @@ contract TokenFactory is AccessControlEnumerable {
                 controllerCheckData[_msgSender()].rewardBankRate,
                 controllerCheckData[_msgSender()].rewardBase
             )
-        );
+        ), "TokenFactory: init err");
     
         _tokens.add(token);
         _tokenOwnerTokens[owner].add(token);
@@ -454,8 +459,7 @@ contract TokenFactory is AccessControlEnumerable {
         string memory name,
         string memory logo,
         uint64 actor,
-        uint256 depositRatePerToken,
-        uint256 depositBasePerToken
+        uint256 pledge
     ) external returns (address token) {
         require(hasRole(CREATE_TOKEN_ROLE, _msgSender()), "TokenFactory: must have create token role to create");
         require(address(0) != address(tokenExchange), "TokenFactory: not exists token exchange");
@@ -472,8 +476,9 @@ contract TokenFactory is AccessControlEnumerable {
         key.setBurner(token);
         bankRewardDfil.setRewarder(token);
 
-        ITokenTemplate(token).initialize(
+        require(ITokenTemplate(token).initialize(
             ITokenTemplate.CreateData(
+                idoStartTime,
                 cap,
                 name,
                 logo,
@@ -485,14 +490,11 @@ contract TokenFactory is AccessControlEnumerable {
                 superAdmin,
                 defaultAdmin,
                 top,
-                burnKeyRate,
-                burnKeyBase,
                 controllerCheckData[_msgSender()].costRatePerToken,
                 controllerCheckData[_msgSender()].costBasePerToken,
                 controllerCheckData[_msgSender()].profitRatePerToken,
                 controllerCheckData[_msgSender()].profitBasePerToken,
-                depositRatePerToken,
-                depositBasePerToken,
+                pledge,
                 _msgSender(),
                 swapFactory,
                 callPair,
@@ -506,7 +508,7 @@ contract TokenFactory is AccessControlEnumerable {
                 controllerCheckData[_msgSender()].rewardBankRate,
                 controllerCheckData[_msgSender()].rewardBase
             )
-        );
+        ), "TokenFactory: init err");
 
         _topUnionTokens.add(token);
 
@@ -712,15 +714,17 @@ contract TokenFactory is AccessControlEnumerable {
     }
 
     // super admin
+    function setIdoStartTime(uint256 timeStamp) external onlySuperAdminRole {
+        idoStartTime = timeStamp;  
+    }
+
     function setDefaultAdmin(address defaultAdmin_) external onlySuperAdminRole {
         defaultAdmin = defaultAdmin_;  
     }
 
-    function setBurnKey(uint256 rate, uint256 base) external onlySuperAdminRole {
-        require(base > 0, "TokenFactory: base err");
-
-        burnKeyRate = rate;
-        burnKeyBase = base;
+    // call pair setter
+    function setCallPair(address callPair_) external onlyCallPairSetterRole {
+        callPair =  callPair_;
     }
 
     // default admin
@@ -730,10 +734,6 @@ contract TokenFactory is AccessControlEnumerable {
 
     function setSwapFactory(address swapFactory_) external onlyDefaultAdminRole {
         swapFactory = swapFactory_;
-    }
-
-    function setCallPair(address callPair_) external onlyDefaultAdminRole {
-        callPair =  callPair_;
     }
 
     function setT(address t) external onlyDefaultAdminRole {
@@ -762,5 +762,9 @@ contract TokenFactory is AccessControlEnumerable {
 
     function withdrawFilecoinMinerController(address controller, address payable account) external onlyDefaultAdminRole {
         IFilecoinMinerControllerTemplate(controller).adminWithdraw(account);
+    }
+
+    function returnPledge(address controller) payable external onlyDefaultAdminRole {
+        IFilecoinMinerControllerTemplate(controller).returnPledge();
     }
 }
