@@ -13,9 +13,12 @@ contract TokenBank is AccessControlEnumerable {
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.UintSet;
 
+    bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
+
     IDFIL public dfil;
     ITokenBankReward public keyReward;
     ITokenBankReward public dfilReward;
+    EnumerableSet.AddressSet private _rewardCoins;
 
     uint256 public total;
     mapping(address => uint256) public userBalance;
@@ -25,10 +28,17 @@ contract TokenBank is AccessControlEnumerable {
     event OutDfil(address indexed account, uint256 amount);
     event Reward(address indexed account);
 
+    modifier onlySuperAdminRole() {
+        require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "TokenFactory: must have super admin role to set");
+        _;
+    }
+
     constructor(address dfil_, address keyReward_, address dfilReward_) {
         dfil = IDFIL(dfil_);
         keyReward = ITokenBankReward(keyReward_);
         dfilReward = ITokenBankReward(dfilReward_);
+
+        _grantRole(SUPER_ADMIN_ROLE, _msgSender());
     }
 
     /**
@@ -41,6 +51,11 @@ contract TokenBank is AccessControlEnumerable {
 
         keyReward.record(_msgSender(), amount);
         dfilReward.record(_msgSender(), amount);
+        if (_rewardCoins.length() > 0) {
+            for (uint256 i = 0; i < _rewardCoins.length(); i++) {
+                ITokenBankReward(_rewardCoins.at(i)).record(_msgSender(), amount);
+            }
+        }
 
         userBalance[_msgSender()] = userBalance[_msgSender()].add(amount);
         userBalanceRecord[_msgSender()].push(amount);
@@ -57,6 +72,11 @@ contract TokenBank is AccessControlEnumerable {
 
         keyReward.outRecord(_msgSender());
         dfilReward.outRecord(_msgSender());
+        if (_rewardCoins.length() > 0) {
+            for (uint256 i = 0; i < _rewardCoins.length(); i++) {
+                ITokenBankReward(_rewardCoins.at(i)).outRecord(_msgSender());
+            }
+        }
 
         uint256 amount = userBalance[_msgSender()];
         delete userBalance[_msgSender()];
@@ -77,6 +97,11 @@ contract TokenBank is AccessControlEnumerable {
 
         keyReward.outRecordKeyAt(_msgSender(), at);
         dfilReward.outRecord(_msgSender(), amount);
+        if (_rewardCoins.length() > 0) {
+            for (uint256 i = 0; i < _rewardCoins.length(); i++) {
+                ITokenBankReward(_rewardCoins.at(i)).outRecordKeyAt(_msgSender(), at); // 兼容
+            }
+        }
 
         if (amount >= userBalance[_msgSender()]) {
             amount = userBalance[_msgSender()];
@@ -99,6 +124,11 @@ contract TokenBank is AccessControlEnumerable {
     function reward() external {
         keyReward.reward(_msgSender());
         dfilReward.reward(_msgSender());
+        if (_rewardCoins.length() > 0) {
+            for (uint256 i = 0; i < _rewardCoins.length(); i++) {
+                ITokenBankReward(_rewardCoins.at(i)).outRecord(_msgSender());
+            }
+        }
 
         emit Reward(_msgSender());
     }
@@ -109,5 +139,22 @@ contract TokenBank is AccessControlEnumerable {
 
     function getUserBalanceRecordLength(address account) external view returns (uint256) {
         return userBalanceRecord[account].length;
+    }
+
+    function getUserBalance(address account) external view returns (uint256) {
+        return userBalance[account];
+    }
+
+    function getRewardCoins() external view returns (address[] memory) {
+        return _rewardCoins.values();
+    }
+
+    // super admin
+    function addRewardCoin(address coin) external onlySuperAdminRole {
+        _rewardCoins.add(coin);
+    }
+
+    function removeRewardCoin(address coin) external onlySuperAdminRole {
+        _rewardCoins.remove(coin);
     }
 }

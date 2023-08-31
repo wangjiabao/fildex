@@ -19,6 +19,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
+    bytes32 public constant SET_MANAGER_ROLE = keccak256("SET_MANAGER_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant GRANT_TOKEN_ROLE = keccak256("GRANT_TOKEN_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
@@ -26,7 +27,6 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     uint256 public defaultAdminRoleLimit;
 
     // 理财地址和金额
-    address public dao;
     address payable public manager;
     uint256 public managerAmount;
     bool public withdrawAndDeleteManagerStatus = false;
@@ -38,6 +38,9 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     uint256 public rate = 2;
     uint256 public base = 1000;
     address payable public feeTo;
+
+    uint256 public levelLow;
+    uint256 public levelHigh;
 
     bool public exchangeEnableNoLimit;
     mapping(address => int256) public tokenOwnerFilIn;
@@ -74,9 +77,13 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         _;
     }
 
+    modifier onlySetManagerRole() {
+        require(hasRole(SET_MANAGER_ROLE, _msgSender()), "TokenExchange: must have set manager role to set");
+        _;
+    }
+
     constructor(
         address factory_,
-        address dao_,
         address dfil_,
         address payable feeTo_,
         uint256 defaultAdminRoleLimit_
@@ -84,11 +91,11 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         factory = ITokenFactory(factory_);
         dfil = IDFIL(dfil_);
         feeTo = feeTo_;
-        dao = dao_;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setRoleAdmin(ADMIN_ROLE, SUPER_ADMIN_ROLE);
         _grantRole(SUPER_ADMIN_ROLE, _msgSender());
+        _grantRole(SET_MANAGER_ROLE, _msgSender());
         _grantRole(ADMIN_ROLE, _msgSender());
         _setRoleAdmin(TOKEN_ROLE, GRANT_TOKEN_ROLE);
         _grantRole(GRANT_TOKEN_ROLE, factory_);
@@ -154,16 +161,12 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
             }
         }
 
-        dfil.burnFrom(_msgSender(), amount.sub(fee));
-        if (!callManagerForFil(amount.sub(fee))) {
-            payable(_msgSender()).transfer(amount.sub(fee));
-        }
-
+        dfil.burnFrom(_msgSender(), amount.sub(fee)); // 余额充足证明
+        require(callManagerForFil(amount.sub(fee)), "TokenExchange: not enough");
+        payable(_msgSender()).transfer(amount.sub(fee));
+        
         // 如果有理财，主动送出
-        if (address(0) != manager) {
-            managerAmount = managerAmount.add(address(this).balance);
-            IManager(manager).pay{value: address(this).balance}();
-        }
+        callManagerToFil();
 
         checkIfAllowAndSetAccountUnionWithAmount(factory.getUserOwnerByAccount(_msgSender()));
 
@@ -221,9 +224,11 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         }
 
         dfil.burnFrom(_msgSender(), amount.sub(fee));
-        if (!callManagerForFil(amount.sub(fee))) {
-            owner.transfer(amount.sub(fee));
-        }
+        require(callManagerForFil(amount.sub(fee)), "TokenExchange: not enough");
+        owner.transfer(amount.sub(fee));
+
+        // 如果有理财，主动送出
+        callManagerToFil();
 
         emit WITHDRAWFILComplated(_msgSender(), owner, amount, usePlatToken);
     }
@@ -377,76 +382,51 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         uint256 tmpAllFee = dfil.balanceOf(address(this));
         dfil.burn(tmpAllFee);
 
-        if (!callManagerForFil(tmpAllFee)) {
-            feeTo.transfer(tmpAllFee);
-        }
+        require(callManagerForFil(tmpAllFee), "TokenExchange: not enough");
+        feeTo.transfer(tmpAllFee);
+
+        // 如果有理财，主动送出
+        callManagerToFil();
 
         emit feeToWithdrawComplated(feeTo, tmpAllFee);
-    }
-
-    /**
-     * 理财提现
-     */
-    function managerWithdrawForFil(uint256 amount) external nonReentrant {
-        require(address(0) != manager && manager == _msgSender(), "TokenExchange: not manager");
-        require(address(this).balance >= amount, "TokenExchange: not enough");
-
-        managerAmount = managerAmount.add(amount);
-        manager.transfer(amount);
-        emit ManagerWithdrawForFilComplated(_msgSender(), amount);
     }
 
     /**
      * 从理财处取得fil
      */
     function callManagerForFil(uint256 amount) internal returns (bool) {
-        if (address(0) == manager) {
-            return false;
-        }
-
-        if (0 == managerAmount) {
-            return false;
-        }
-
-        uint256 balanceFil = address(this).balance;
-        IManager(manager).repay(amount);
-        if (address(this).balance >= balanceFil.add(amount)) {
-            managerAmount = managerAmount.sub(amount);
+        if (address(0) == manager || 0 == managerAmount) { // 没地址或无账
             return true;
         }
 
-        managerAmount = managerAmount.sub(address(this).balance.sub(balanceFil));
+        uint256 balanceFil = address(this).balance;
+        if (balanceFil > amount) {
+            return true; // 充足，不要
+        } else { // 余额不足
+            amount = amount.sub(balanceFil).add(levelLow); // 要差值，并补回低水位的钱
+            IManager(manager).repay(amount);
+            if (address(this).balance >= balanceFil.add(amount)) {
+                managerAmount = managerAmount.sub(amount);
+                return true;
+            }
+        }
+        
         return false;
     }
 
     /**
-     * 从理财处取得指定金额的fil，并删除理财信息
+     * 给理财fil
      */
-    function withdrawAndDeleteManager(uint256 managerAmount_) external {
-        require(withdrawAndDeleteManagerStatus, "TokenExchange: status err");
-
-        uint256 tmpAmount = managerAmount;
-        if (0 < managerAmount_) {
-            tmpAmount = managerAmount_;
-            require(tmpAmount <= managerAmount, "TokenExchange: manager amount err");
+    function callManagerToFil() internal returns (bool) {
+        if (address(0) != manager) { // 有地址
+            uint256 balanceFil = address(this).balance;
+            if(levelHigh <= balanceFil) {
+                managerAmount = managerAmount.add(balanceFil.sub(levelLow));
+                IManager(manager).pay{value: balanceFil.sub(levelLow)}();
+            }
         }
 
-        require(callManagerForFil(tmpAmount), "TokenExchange: call manager for fil err");
-        if (0 == managerAmount) {
-            manager = payable(address(0));
-        }
-    }
-
-    // dao
-    function setManager(address payable manager_) external {
-        require(dao == _msgSender(), "TokenExchange: not dao");
-        require(address(0) != manager_, "TokenExchange: err manager");
-        manager = manager_;
-    }
-
-    function setWithdrawAndDeleteManagerStatus() external {
-        require(dao == _msgSender(), "TokenExchange: not dao");
-        withdrawAndDeleteManagerStatus = true;
+        return true;
     }
 
     // tokenFactory
@@ -472,18 +452,27 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         platToken = IPlatToken(platToken_);
     }
 
+    function setManagerGetFilLevel(address platToken_) external onlySuperAdminRole {
+        platToken = IPlatToken(platToken_);
+    }
+
+    function setManagerLevel(uint256 levelLow_, uint256 levelHigh_) external onlySuperAdminRole {
+        levelLow = levelLow_;
+        levelHigh = levelHigh_;
+    }
+
+    // set manager
+    function setManager(address payable manager_) external onlySetManagerRole {
+        manager = manager_;
+    }
+
     // default admin
     function withdrawAll() external onlyDefaultAdminRole nonReentrant {
-        callManagerForFil(managerAmount);
         payable(_msgSender()).transfer(address(this).balance);
     }
 
     function setFactory(address factory_) external onlyDefaultAdminRole {
        factory = ITokenFactory(factory_);
-    }
-
-    function setDao(address dao_) external onlyDefaultAdminRole {
-       dao = dao_;
     }
 
     receive() external payable {}
