@@ -215,7 +215,7 @@ contract TokenFactory is AccessControlEnumerable {
         uint256 profitBasePerToken,
         uint256 timeType
     ) external {
-        require(_owners.contains(_msgSender()), "TokenFactory: not exists owner");
+        require(_owners.contains(_msgSender()) && _msgSender() != top, "TokenFactory: not exists owner");
         if (!_tokenOwnerAcotrMiners[_msgSender()].contains(actor)) {
             _tokenOwnerAcotrMiners[_msgSender()].add(actor);
             _tokenOwnerAcotrMinersCheckData[_msgSender()][actor] = IFilecoinMinerControllerTemplate.CheckData(
