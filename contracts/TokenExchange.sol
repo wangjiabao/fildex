@@ -41,6 +41,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
 
     uint256 public levelLow;
     uint256 public levelHigh;
+    uint256 public managerFilLimitAmount;
 
     bool public exchangeEnableNoLimit;
     mapping(address => int256) public tokenOwnerFilIn;
@@ -418,14 +419,23 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
      * 给理财fil
      */
     function callManagerToFil() internal returns (bool) {
-        if (address(0) != manager) { // 有地址
-            uint256 balanceFil = address(this).balance;
-            if(levelHigh <= balanceFil) {
-                managerAmount = managerAmount.add(balanceFil.sub(levelLow));
-                IManager(manager).pay{value: balanceFil.sub(levelLow)}();
+        if (address(0) == manager || managerFilLimitAmount <= managerAmount || levelHigh > address(this).balance) {
+            return false;
+        }
+
+        uint256 amount;
+        if(managerFilLimitAmount >= managerAmount.add(address(this).balance)) { // 已送出+余额，未达标
+            amount = address(this).balance.sub(levelLow);
+        } else { // 即将达标，已送出+余额大于限制
+            amount = managerFilLimitAmount.sub(managerAmount); // 差值一定在余额以内
+            if (address(this).balance.sub(amount) < levelLow) { // 差值在低水位以下
+                amount = address(this).balance.sub(levelLow); // 留下低水位
             }
         }
 
+        managerAmount = managerAmount.add(amount);
+        IManager(manager).pay{value: amount}();
+        
         return true;
     }
 
@@ -452,11 +462,12 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         platToken = IPlatToken(platToken_);
     }
 
-    function setManagerGetFilLevel(address platToken_) external onlySuperAdminRole {
-        platToken = IPlatToken(platToken_);
+    function setManagerGetFilLevel(uint256 amount) external onlySuperAdminRole {
+        managerFilLimitAmount = amount;
     }
 
     function setManagerLevel(uint256 levelLow_, uint256 levelHigh_) external onlySuperAdminRole {
+        require(levelLow_ <= levelHigh_, "TokenFactory: err");
         levelLow = levelLow_;
         levelHigh = levelHigh_;
     }
