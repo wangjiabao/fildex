@@ -20,7 +20,6 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
 
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
     bytes32 public constant SET_MANAGER_ROLE = keccak256("SET_MANAGER_ROLE");
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant GRANT_TOKEN_ROLE = keccak256("GRANT_TOKEN_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
 
@@ -94,10 +93,8 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         feeTo = feeTo_;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _setRoleAdmin(ADMIN_ROLE, SUPER_ADMIN_ROLE);
         _grantRole(SUPER_ADMIN_ROLE, _msgSender());
         _grantRole(SET_MANAGER_ROLE, _msgSender());
-        _grantRole(ADMIN_ROLE, _msgSender());
         _setRoleAdmin(TOKEN_ROLE, GRANT_TOKEN_ROLE);
         _grantRole(GRANT_TOKEN_ROLE, factory_);
 

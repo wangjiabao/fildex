@@ -11,7 +11,6 @@ contract Key is ERC20PresetMinterPauser {
 
     constructor() ERC20PresetMinterPauser("KEY", "key") {
         _setRoleAdmin(BURNER_ROLE, GRANT_BURNER_ROLE);
-        _grantRole(GRANT_BURNER_ROLE, _msgSender());
     }
 
     function burn(uint256 amount) public override {}
