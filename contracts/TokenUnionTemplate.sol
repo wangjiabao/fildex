@@ -231,7 +231,7 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         require(_accountUnion.contains(_msgSender()), "Token: err withdraw owner");
         require(0 < sellAmount.sub(sellAmounts[_msgSender()]), "Token: amount must more than 0");
 
-        uint256 tmpSellProfitAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(profitRatePerToken).div(profitBasePerToken);
+        uint256 tmpSellProfitAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(profitRatePerToken).div(profitBasePerToken).mul(accountUnionAmount[_msgSender()]).div(totalAmount);
         sellAmounts[_msgSender()] = sellAmount;
         dfil.transfer(_msgSender(), tmpSellProfitAmount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
     }
