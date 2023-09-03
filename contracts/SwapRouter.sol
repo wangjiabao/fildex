@@ -72,7 +72,7 @@ contract SwapRouter is ISwapRouter {
         uint amountA,
         uint amountB
     ) internal {
-        if (tokenA == dfil && ISwapTokenFactory(tokenFactory).existsToken(tokenB)) {
+        if (tokenA == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenB) || ISwapTokenFactory(tokenFactory).existsTopUnionTokens(tokenB))) {
             if (1 == ISwapTokenTemplate(tokenB).getStakeType()) {
                 // 等比
                 ISwapTokenTemplate(tokenB).stakeRecord(msg.sender, amountA.mul(ISwapTokenTemplate(tokenB).getStageTypeRate().mul(ISwapTokenTemplate(tokenB).getStageTypeBase())));
@@ -81,7 +81,7 @@ contract SwapRouter is ISwapRouter {
                 ISwapTokenTemplate(tokenB).stakeRecord(msg.sender, amountB.mul(ISwapTokenTemplate(tokenB).getStageTypeRate().mul(ISwapTokenTemplate(tokenB).getStageTypeBase())));
             }
 
-        } else if (tokenB == dfil && ISwapTokenFactory(tokenFactory).existsToken(tokenA)) {
+        } else if (tokenB == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenA) || ISwapTokenFactory(tokenFactory).existsTopUnionTokens(tokenA))) {
             if (1 == ISwapTokenTemplate(tokenA).getStakeType()) {
                 ISwapTokenTemplate(tokenA).stakeRecord(msg.sender, amountA.mul(ISwapTokenTemplate(tokenA).getStageTypeRate().mul(ISwapTokenTemplate(tokenA).getStageTypeBase())));
             } else if (2 == ISwapTokenTemplate(tokenA).getStakeType()) {
@@ -99,9 +99,9 @@ contract SwapRouter is ISwapRouter {
         uint liquidity,
         uint allLiquidity
     ) internal {
-        if (tokenA == dfil && ISwapTokenFactory(tokenFactory).existsToken(tokenB)) {
+        if (tokenA == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenB) || ISwapTokenFactory(tokenFactory).existsTopUnionTokens(tokenB))) {
             ISwapTokenTemplate(tokenB).unStakeRecord(msg.sender, ISwapTokenTemplate(tokenB).getStageRecords(msg.sender).mul(liquidity).div(allLiquidity));
-        } else if (tokenB == dfil && ISwapTokenFactory(tokenFactory).existsToken(tokenA)) {
+        } else if (tokenB == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenA) || ISwapTokenFactory(tokenFactory).existsTopUnionTokens(tokenA))) {
             ISwapTokenTemplate(tokenA).unStakeRecord(msg.sender, ISwapTokenTemplate(tokenA).getStageRecords(msg.sender).mul(liquidity).div(allLiquidity));
         }
     }

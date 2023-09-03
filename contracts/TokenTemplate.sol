@@ -74,6 +74,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
     address public swapFactory;
     uint256 public stakeRewardCycle;
     uint256 public rewardAll;
+    uint256 public totalStageAmount;
     
     event ExchangeToken(address indexed account, uint256 amount);
 
@@ -237,6 +238,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         require(callPair == _msgSender(), "Token: err caller");
         dfil.transferFrom(user, address(this), amount);
         stageRecords[user] = stageRecords[user].add(amount);
+        totalStageAmount = totalStageAmount.add(amount);
     }
     
     /**
@@ -248,7 +250,8 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
             amount = stageRecords[user];
         }
 
-        stageRecords[user] = stageRecords[user].sub(amount);  
+        stageRecords[user] = stageRecords[user].sub(amount);
+        totalStageAmount = totalStageAmount.sub(amount);  
         dfil.transfer(user, amount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
     }
 
