@@ -53,6 +53,11 @@ contract SwapRouter is ISwapRouter {
     }
 
     // superAdmin
+    function setSuperAdmin(address _superAdmin) external {
+        require(msg.sender == superAdmin, "err");
+        superAdmin = _superAdmin;
+    }
+
     function setFeeTo(address _feeTo) external {
         require(msg.sender == superAdmin, "err");
         feeTo = _feeTo;

@@ -243,11 +243,12 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
         require(owner == _msgSender(), "Token: err withdraw owner");
         require(0 < sellAmount.sub(sellAmounts[_msgSender()]), "Token: amount must more than 0");
 
-        uint256 tmpSellTotalAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(costRatePerToken).div(costBasePerToken).add(sellAmount.sub(sellAmounts[_msgSender()]).mul(depositRatePerToken).div(depositBasePerToken));
+        uint256 tmpSellCostAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(costRatePerToken).div(costBasePerToken);
+        uint256 tmpSellDepositAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(depositRatePerToken).div(depositBasePerToken);
         sellAmounts[_msgSender()] = sellAmount;
 
-        dfil.approve(address(tokenExchange), tmpSellTotalAmount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
-        tokenExchange.UNIONWITHDRAWFIL(owner, tmpSellTotalAmount, usePlatToken);
+        dfil.approve(address(tokenExchange), tmpSellCostAmount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
+        tokenExchange.UNIONWITHDRAWFIL(owner, tmpSellCostAmount, tmpSellDepositAmount, usePlatToken);
     }
 
     /**
@@ -291,7 +292,7 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
     /**
      * 解押
      */
-    function unStakeRecord(address user, uint256 amount) external {
+     function unStakeRecord(address user, uint256 amount) external {
         require(callPair == _msgSender(), "Token: err caller");
         if (amount >= stageRecords[user]) {
             amount = stageRecords[user];
@@ -299,7 +300,7 @@ contract TokenUnionTemplate is ERC20, AccessControlEnumerable, Initializable {
 
         stageRecords[user] = stageRecords[user].sub(amount);
         totalStageAmount = totalStageAmount.sub(amount);  
-        dfil.transfer(user, amount);  // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
+        dfil.transfer(user, amount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
     }
 
     /**

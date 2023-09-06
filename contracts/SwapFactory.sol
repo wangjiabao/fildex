@@ -20,10 +20,10 @@ contract SwapFactory is ISwapFactory {
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
-    constructor(address _factoryAdmin, address _tokenCheck, address _dfil) public {
+    constructor(address _factoryAdmin, address _tokenCheck, address _callPairSetter, address _dfil) public {
         factoryAdmin = _factoryAdmin;
         tokenCheck = _tokenCheck;
-        callPairSetter = _factoryAdmin;
+        callPairSetter = _callPairSetter;
         dfil = _dfil;
     }
 

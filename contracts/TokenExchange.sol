@@ -154,6 +154,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         if (fee > 0) {
             if (address(0) != address(platToken) && 0 < usePlatToken) {
                 platToken.deal(fee);
+                fee = 0;
             } else {
                 dfil.transferFrom(_msgSender(), address(this), fee);
             }
@@ -207,28 +208,38 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     /**
      * 算力合约调用，联合发售，提现节点商售卖金额/提现发行商售卖金额，平台币抵消手续费
      */
-    function UNIONWITHDRAWFIL(address payable owner, uint256 amount, uint256 usePlatToken) external nonReentrant {
+    function UNIONWITHDRAWFIL(address payable owner, uint256 costAmount, uint256 depositAmount, uint256 usePlatToken) external nonReentrant {
         require(hasRole(TOKEN_ROLE, _msgSender()), "TokenExchange: must have token role");
         require(factory.existsOwner(factory.getUserOwnerByAccount(owner)), "TokenExchange: not owner");
-        require(0 < amount, "TokenExchange: amount must more than 0");
 
-        uint256 fee = amount.mul(rate).div(base);
-        if (fee > 0) {
+        uint256 feeCost = costAmount.mul(rate).div(base);
+        if (feeCost > 0) {
             if (address(0) != address(platToken) && 0 < usePlatToken) {
-                platToken.deal(fee);
+                platToken.deal(feeCost);
+                feeCost = 0;
             } else {
-                dfil.transferFrom(_msgSender(), address(this), fee);
+                dfil.transferFrom(_msgSender(), address(this), feeCost);
+            }
+        }
+        dfil.burnFrom(_msgSender(), costAmount.sub(feeCost));
+        
+        uint256 feeDeposit = depositAmount.mul(rate).div(base);
+        if (feeDeposit > 0) {
+            if (address(0) != address(platToken) && 0 < usePlatToken) {
+                platToken.deal(feeDeposit);
+                feeDeposit = 0;
+            } else {
+                dfil.mint(address(this), feeDeposit);
             }
         }
 
-        dfil.burnFrom(_msgSender(), amount.sub(fee));
-        require(callManagerForFil(amount.sub(fee)), "TokenExchange: not enough");
-        owner.transfer(amount.sub(fee));
+        require(callManagerForFil(costAmount.sub(feeCost).add(depositAmount).sub(feeDeposit)), "TokenExchange: not enough");
+        owner.transfer(costAmount.sub(feeCost).add(depositAmount).sub(feeDeposit));
 
         // 如果有理财，主动送出
         callManagerToFil();
 
-        emit WITHDRAWFILComplated(_msgSender(), owner, amount, usePlatToken);
+        emit WITHDRAWFILComplated(_msgSender(), owner, costAmount.add(depositAmount), usePlatToken);
     }
 
     /**

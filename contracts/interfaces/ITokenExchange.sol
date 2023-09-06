@@ -12,7 +12,7 @@ interface ITokenExchange {
 
     function FILLOCK(address owner, uint256 costAmount, uint256 profitRateAmount, uint256 depositAmount, bool union) external;
 
-    function UNIONWITHDRAWFIL(address payable owner, uint256 amount, uint256 usePlatToken) external;
+    function UNIONWITHDRAWFIL(address payable owner, uint256 costAmount, uint256 depositAmount, uint256 usePlatToken) external;
 
     function getAccountUnion() external view returns (address[] memory);
 
