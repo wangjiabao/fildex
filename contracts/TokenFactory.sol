@@ -231,7 +231,9 @@ contract TokenFactory is AccessControlEnumerable {
                 0,
                 0,
                 0,
-                timeType
+                timeType,
+                0,
+                1
             );
             ownerActorCurrentControllers[_msgSender()][actor] = address(0);
         }
@@ -265,8 +267,9 @@ contract TokenFactory is AccessControlEnumerable {
                 0,
                 0,
                 0,
-                timeType
-
+                timeType,
+                0,
+                1
             );
             ownerActorCurrentControllers[top][actor] = address(0);
         }
@@ -357,7 +360,9 @@ contract TokenFactory is AccessControlEnumerable {
                 createControllerData.rewardRate,
                 createControllerData.rewardBase,
                 createControllerData.rewardBankRate,
-                tmpTimeType
+                tmpTimeType,
+                createControllerData.keyRatePerT,
+                createControllerData.keyBasePerT
             );
         } else {
             controllerCheckData[filecoinControllerMiner] = IFilecoinMinerControllerTemplate.CheckData(
@@ -372,7 +377,9 @@ contract TokenFactory is AccessControlEnumerable {
                 createControllerData.rewardRate,
                 createControllerData.rewardBase,
                 createControllerData.rewardBankRate,
-                tmpTimeType
+                tmpTimeType,
+                createControllerData.keyRatePerT,
+                createControllerData.keyBasePerT
             );
         }
 
@@ -443,7 +450,9 @@ contract TokenFactory is AccessControlEnumerable {
                 controllerCheckData[_msgSender()].rewardRate,
                 controllerCheckData[_msgSender()].rewardBase,
                 controllerCheckData[_msgSender()].rewardBankRate,
-                controllerCheckData[_msgSender()].rewardBase
+                controllerCheckData[_msgSender()].rewardBase,
+                controllerCheckData[_msgSender()].keyRatePerT,
+                controllerCheckData[_msgSender()].keyBasePerT
             )
         ), "TokenFactory: init err");
     
@@ -508,7 +517,9 @@ contract TokenFactory is AccessControlEnumerable {
                 controllerCheckData[_msgSender()].rewardRate,
                 controllerCheckData[_msgSender()].rewardBase,
                 controllerCheckData[_msgSender()].rewardBankRate,
-                controllerCheckData[_msgSender()].rewardBase
+                controllerCheckData[_msgSender()].rewardBase,
+                controllerCheckData[_msgSender()].keyRatePerT,
+                controllerCheckData[_msgSender()].keyBasePerT
             )
         ), "TokenFactory: init err");
 

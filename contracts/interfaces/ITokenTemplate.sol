@@ -33,6 +33,8 @@ interface ITokenTemplate {
         uint256 rewardBase;
         uint256 rewardBankRate; 
         uint256 rewardBankBase;
+        uint256 keyRatePerT;
+        uint256 keyBasePerT;
     }
 
     function initialize(CreateData memory data) external returns (bool);

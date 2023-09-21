@@ -28,6 +28,9 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
     IDFIL public dfil; 
     IKey  public key;
 
+    uint256 public keyRatePerT;
+    uint256 public keyBasePerT;
+
     uint256 private  _cap;
     string public logo;
     string public nameToken;
@@ -121,7 +124,8 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
         callPair = createData.callPair;
         stageType = createData.stageType;
         stageTypeRate = createData.stageTypeRate;
-        stageTypeBase = createData.stageTypeBase;
+        keyRatePerT = createData.keyRatePerT;
+        keyBasePerT = createData.keyBasePerT;
 
         totalAmount = _cap.mul(costRatePerToken).div(costBasePerToken).add(_cap.mul(profitRatePerToken).div(profitBasePerToken)).add(_cap.mul(depositRatePerToken).div(depositBasePerToken));
         uint256 allowAccountUnionAmountTotal = tokenExchange.getAllowAccountUnionAmountTotal();
@@ -206,7 +210,7 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
         }
 
         if (block.timestamp <= keyEndTime) {
-            key.burnFrom(_msgSender(), amount.mul(costRatePerToken).div(costBasePerToken).add(amount.mul(profitRatePerToken).div(profitBasePerToken)));
+            key.burnFrom(_msgSender(), amount.mul(keyRatePerT).div(keyBasePerT));
         }
         
         _users.add(_msgSender());

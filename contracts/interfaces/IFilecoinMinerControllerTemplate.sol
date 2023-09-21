@@ -29,6 +29,8 @@ interface IFilecoinMinerControllerTemplate {
         uint256 rewardBase;
         uint256 rewardBankRate;
         uint256 timeType;
+        uint256 keyRatePerT;
+        uint256 keyBasePerT;
     }
 
     struct CreateControllerData {
@@ -44,6 +46,8 @@ interface IFilecoinMinerControllerTemplate {
         uint256 rewardBankRate;
         uint256 rewardBase;
         uint256 extraTime;
+        uint256 keyRatePerT;
+        uint256 keyBasePerT;
     }
 
     function initialize(CreateData memory data) external returns (bool);

@@ -28,6 +28,9 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
     IDFIL public dfil; 
     IKey  public key;
 
+    uint256 public keyRatePerT;
+    uint256 public keyBasePerT;
+
     uint256 private  _cap;
     string public logo;
     string public nameToken;
@@ -117,6 +120,8 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
         stageType = createData.stageType;
         stageTypeRate = createData.stageTypeRate;
         stageTypeBase = createData.stageTypeBase;
+        keyRatePerT = createData.keyRatePerT;
+        keyBasePerT = createData.keyBasePerT;
 
         tokenExchange.FILLOCK(owner, _cap.mul(costRatePerToken).div(costBasePerToken), _cap.mul(profitRatePerToken).div(profitBasePerToken), _cap.mul(depositRatePerToken).div(depositBasePerToken), false);
 
@@ -171,7 +176,7 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
         }
         
         if (block.timestamp <= keyEndTime) {
-            key.burnFrom(_msgSender(), amount.mul(costRatePerToken).div(costBasePerToken).add(amount.mul(profitRatePerToken).div(profitBasePerToken)));
+            key.burnFrom(_msgSender(), amount.mul(keyRatePerT).div(keyBasePerT));
         }
         
         _users.add(_msgSender());
