@@ -58,7 +58,7 @@ contract DFIL is ERC20PresetMinterPauser {
 
     function setWhiteEnable() external {
         require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "DFIL: must have super admin role to set");
-        whiteEnable = true;
+        whiteEnable = false;
     }
 
     function setWhite(address account, bool enable) external {

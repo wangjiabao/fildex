@@ -5,7 +5,6 @@ import "./interfaces/IKey.sol";
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 
 contract TokenBankRewardKey is AccessControlEnumerable {
@@ -52,7 +51,8 @@ contract TokenBankRewardKey is AccessControlEnumerable {
         _;
     }
 
-    event Reward(address indexed account, uint256 amount);
+    event RewardCompleted(address indexed account, uint256 amount);
+    event SetRewardRateAndStakingFinishTimeCompleted(uint256 rewardRate, uint256 stakeRewardCycle);
 
     constructor(address rewardUNIToken_) {
         rewardUNIToken = IKey(rewardUNIToken_);
@@ -140,9 +140,9 @@ contract TokenBankRewardKey is AccessControlEnumerable {
         
         if (stakingRewards > 0) {
             rewardUNIToken.mint(account, stakingRewards);
-        }
 
-        emit Reward(account, stakingRewards);
+            emit RewardCompleted(account, stakingRewards);
+        }
     }
 
     function getHistoryRewardRate() external view returns (uint256[] memory) {
@@ -176,6 +176,8 @@ contract TokenBankRewardKey is AccessControlEnumerable {
 
         _historyRewardRate.add(rewardRate_);
         _historyStakingTime.add(stakingFinishTime_);
+
+        emit SetRewardRateAndStakingFinishTimeCompleted(rewardRate_, stakingFinishTime_);
     }
 
     // default admin 

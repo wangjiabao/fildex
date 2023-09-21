@@ -30,6 +30,8 @@ contract SwapRouter is ISwapRouter {
         _;
     }
 
+    event feeCompleted(address indexed user, uint256 amount);
+
     constructor(address _factory, address _superAdmin, address _dfil, address _tokenFactory, address _feeTo) public {
         factory = _factory;        
         superAdmin = _superAdmin;
@@ -77,7 +79,7 @@ contract SwapRouter is ISwapRouter {
         uint amountA,
         uint amountB
     ) internal {
-        if (tokenA == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenB) || ISwapTokenFactory(tokenFactory).existsTopUnionTokens(tokenB))) {
+        if (tokenA == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenB) || ISwapTokenFactory(tokenFactory).existsTopUnionToken(tokenB))) {
             if (1 == ISwapTokenTemplate(tokenB).getStakeType()) {
                 // 等比
                 ISwapTokenTemplate(tokenB).stakeRecord(msg.sender, amountA.mul(ISwapTokenTemplate(tokenB).getStageTypeRate().mul(ISwapTokenTemplate(tokenB).getStageTypeBase())));
@@ -86,11 +88,11 @@ contract SwapRouter is ISwapRouter {
                 ISwapTokenTemplate(tokenB).stakeRecord(msg.sender, amountB.mul(ISwapTokenTemplate(tokenB).getStageTypeRate().mul(ISwapTokenTemplate(tokenB).getStageTypeBase())));
             }
 
-        } else if (tokenB == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenA) || ISwapTokenFactory(tokenFactory).existsTopUnionTokens(tokenA))) {
+        } else if (tokenB == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenA) || ISwapTokenFactory(tokenFactory).existsTopUnionToken(tokenA))) {
             if (1 == ISwapTokenTemplate(tokenA).getStakeType()) {
-                ISwapTokenTemplate(tokenA).stakeRecord(msg.sender, amountA.mul(ISwapTokenTemplate(tokenA).getStageTypeRate().mul(ISwapTokenTemplate(tokenA).getStageTypeBase())));
-            } else if (2 == ISwapTokenTemplate(tokenA).getStakeType()) {
                 ISwapTokenTemplate(tokenA).stakeRecord(msg.sender, amountB.mul(ISwapTokenTemplate(tokenA).getStageTypeRate().mul(ISwapTokenTemplate(tokenA).getStageTypeBase())));
+            } else if (2 == ISwapTokenTemplate(tokenA).getStakeType()) {
+                ISwapTokenTemplate(tokenA).stakeRecord(msg.sender, amountA.mul(ISwapTokenTemplate(tokenA).getStageTypeRate().mul(ISwapTokenTemplate(tokenA).getStageTypeBase())));
             }
         }
     }
@@ -104,9 +106,9 @@ contract SwapRouter is ISwapRouter {
         uint liquidity,
         uint allLiquidity
     ) internal {
-        if (tokenA == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenB) || ISwapTokenFactory(tokenFactory).existsTopUnionTokens(tokenB))) {
+        if (tokenA == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenB) || ISwapTokenFactory(tokenFactory).existsTopUnionToken(tokenB))) {
             ISwapTokenTemplate(tokenB).unStakeRecord(msg.sender, ISwapTokenTemplate(tokenB).getStageRecords(msg.sender).mul(liquidity).div(allLiquidity));
-        } else if (tokenB == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenA) || ISwapTokenFactory(tokenFactory).existsTopUnionTokens(tokenA))) {
+        } else if (tokenB == dfil && (ISwapTokenFactory(tokenFactory).existsToken(tokenA) || ISwapTokenFactory(tokenFactory).existsTopUnionToken(tokenA))) {
             ISwapTokenTemplate(tokenA).unStakeRecord(msg.sender, ISwapTokenTemplate(tokenA).getStageRecords(msg.sender).mul(liquidity).div(allLiquidity));
         }
     }
@@ -222,10 +224,11 @@ contract SwapRouter is ISwapRouter {
         uint deadline
     ) external virtual override ensure(deadline) returns (uint[] memory amounts) {
         require(2 == path.length, 'SwapRouter: ERROR_PATH');
+        uint fee = _swapFee(msg.sender, amountIn, path[0], usePlatToken);
+        amountIn = amountIn.sub(fee);
+
         amounts = SwapLibrary.getAmountsOut(factory, amountIn, path);
         require(amounts[amounts.length - 1] >= amountOutMin, 'SwapRouter: INSUFFICIENT_OUTPUT_AMOUNT');
-        
-        _swapFee(amounts[0], path[0], usePlatToken);
 
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, SwapLibrary.pairFor(factory, path[0], path[1]), amounts[0]
@@ -245,8 +248,8 @@ contract SwapRouter is ISwapRouter {
         amounts = SwapLibrary.getAmountsIn(factory, amountOut, path);
         require(amounts[0] <= amountInMax, 'SwapRouter: EXCESSIVE_INPUT_AMOUNT');
 
-        _swapFee(amounts[0], path[0], usePlatToken);
-
+        _swapFee(msg.sender, amounts[0], path[0], usePlatToken);
+        
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, SwapLibrary.pairFor(factory, path[0], path[1]), amounts[0]
         );
@@ -283,7 +286,8 @@ contract SwapRouter is ISwapRouter {
         uint deadline
     ) external virtual override ensure(deadline) {
         require(2 == path.length, 'SwapRouter: ERROR_PATH');
-        _swapFee(amountIn, path[0], usePlatToken);
+        uint fee = _swapFee(msg.sender, amountIn, path[0], usePlatToken);
+        amountIn = amountIn.sub(fee);
 
         TransferHelper.safeTransferFrom(
             path[0], msg.sender, SwapLibrary.pairFor(factory, path[0], path[1]), amountIn
@@ -296,19 +300,24 @@ contract SwapRouter is ISwapRouter {
         );
     }
 
-    function _swapFee(uint amount, address token, uint usePlatToken) internal {
+    function _swapFee(address account, uint amount, address token, uint usePlatToken) internal returns (uint) {
         // fee
         uint fee = amount.mul(feeRate).div(feeBase);
         if (fee > 0) {
             if (address(0) != address(platToken) && 0 < usePlatToken) {
-                platToken.deal(fee);
+                platToken.deal(account, fee);
+                fee = 0;
             } else {
                 // 兼容白名单
                 TransferHelper.safeTransferFrom(
-                    token, msg.sender, address(this), fee
+                    token, account, address(this), fee
                 );
+
+                emit feeCompleted(feeTo, fee);
             }
         }
+
+        return fee;
     }
 
     // **** LIBRARY FUNCTIONS ****

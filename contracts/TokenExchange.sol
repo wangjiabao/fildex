@@ -28,7 +28,6 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     // 理财地址和金额
     address payable public manager;
     uint256 public managerAmount;
-    bool public withdrawAndDeleteManagerStatus = false;
 
     ITokenFactory public factory;
     IDFIL public dfil;
@@ -41,6 +40,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     uint256 public levelLow;
     uint256 public levelHigh;
     uint256 public managerFilLimitAmount;
+    uint256 public managerLimitAmount = 1000000000000000000; // 每次最少送出金额
 
     bool public exchangeEnableNoLimit;
     mapping(address => int256) public tokenOwnerFilIn;
@@ -48,6 +48,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     mapping(address => int256) public tokenOwnerFilBalance;
     mapping(address => int256) public tokenOwnerDfilBalance;
 
+    uint256 public unionLowRate = 15;
     uint256 public unionRate = 30;
     uint256 public unionBase = 100;
     EnumerableSet.AddressSet private _accountUnion;
@@ -153,7 +154,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         uint256 fee = amount.mul(rate).div(base);
         if (fee > 0) {
             if (address(0) != address(platToken) && 0 < usePlatToken) {
-                platToken.deal(fee);
+                platToken.deal(_msgSender(), fee);
                 fee = 0;
             } else {
                 dfil.transferFrom(_msgSender(), address(this), fee);
@@ -196,17 +197,18 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         require(factory.existsOwner(factory.getUserOwnerByAccount(owner)), "TokenExchange: not owner");
         if (union) {
             tokenOwnerFilBalance[owner] = tokenOwnerFilBalance[owner] - costAmount.add(depositAmount).toInt256();
-            checkIfAllowAndSetAccountUnionWithAmount(owner);
         } else {
             tokenOwnerDfilBalance[owner] = tokenOwnerDfilBalance[owner] + depositAmount.toInt256();
             dfil.mint(owner, depositAmount); // 非联合时先增发抵押币部分dfil的给节点商，售卖算力时不会再增发。
         }
 
+        checkIfAllowAndSetAccountUnionWithAmount(owner);
+
         emit FILLOCKComplated(_msgSender(), owner, costAmount, profitRateAmount, depositAmount, union);
     }
 
     /**
-     * 算力合约调用，联合发售，提现节点商售卖金额/提现发行商售卖金额，平台币抵消手续费
+     * 算力合约调用，联合发售，提现发行商售卖金额，平台币抵消手续费
      */
     function UNIONWITHDRAWFIL(address payable owner, uint256 costAmount, uint256 depositAmount, uint256 usePlatToken) external nonReentrant {
         require(hasRole(TOKEN_ROLE, _msgSender()), "TokenExchange: must have token role");
@@ -215,7 +217,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         uint256 feeCost = costAmount.mul(rate).div(base);
         if (feeCost > 0) {
             if (address(0) != address(platToken) && 0 < usePlatToken) {
-                platToken.deal(feeCost);
+                platToken.deal(owner, feeCost);
                 feeCost = 0;
             } else {
                 dfil.transferFrom(_msgSender(), address(this), feeCost);
@@ -226,7 +228,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         uint256 feeDeposit = depositAmount.mul(rate).div(base);
         if (feeDeposit > 0) {
             if (address(0) != address(platToken) && 0 < usePlatToken) {
-                platToken.deal(feeDeposit);
+                platToken.deal(owner, feeDeposit);
                 feeDeposit = 0;
             } else {
                 dfil.mint(address(this), feeDeposit);
@@ -281,7 +283,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
      */
     function setAccountUnion(uint256 userDefineRate) external {
         require(factory.existsOwner(_msgSender()), "TokenFactory: not exists owner");
-        require(userDefineRate >= 15 && userDefineRate <= 100, "TokenFactory: err rate");
+        require(userDefineRate >= unionLowRate && userDefineRate <= 100, "TokenFactory: err rate");
         if (!_accountUnion.contains(_msgSender())) {
             _accountUnion.add(_msgSender());
         }
@@ -322,15 +324,16 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         }
 
         if (
-            tokenOwnerFilBalance[owner] > 0 && 
-            tokenOwnerFilBalance[owner].toUint256().mul(unionRate).div(unionBase) < tokenOwnerFilBalance[owner].toUint256() && 
-            tokenOwnerFilBalance[owner].toUint256().mul(accountUnionRate[owner]).div(unionBase) < tokenOwnerFilBalance[owner].toUint256()
+            tokenOwnerDfilBalance[owner] > 0 
+            && tokenOwnerFilBalance[owner] > 0
+            && tokenOwnerDfilBalance[owner].toUint256().mul(unionRate).div(unionBase) < tokenOwnerFilBalance[owner].toUint256() // 入围判断
+            && tokenOwnerDfilBalance[owner].toUint256().mul(accountUnionRate[owner]).div(unionBase) < tokenOwnerFilBalance[owner].toUint256() // 个人允许判断
         ) {
             if (!_allowAccountUnion.contains(owner)) {
                 _allowAccountUnion.add(owner);
             }
-            
-            allowAccountUnionAmount[owner] = tokenOwnerFilBalance[owner].toUint256().sub(tokenOwnerFilBalance[owner].toUint256().mul(accountUnionRate[owner]).div(unionBase));
+
+            allowAccountUnionAmount[owner] = tokenOwnerFilBalance[owner].toUint256().sub(tokenOwnerDfilBalance[owner].toUint256().mul(accountUnionRate[owner]).div(unionBase));
         } else if (_allowAccountUnion.contains(owner)) {
             _allowAccountUnion.remove(owner);
             delete allowAccountUnionAmount[owner];
@@ -441,6 +444,10 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
             }
         }
 
+        if (managerLimitAmount > amount) {
+            return false;
+        }
+
         managerAmount = managerAmount.add(amount);
         IManager(manager).pay{value: amount}();
         
@@ -454,12 +461,17 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
 
     // super admin
     function setFee(uint256 rate_) external onlySuperAdminRole {
-        require(20 >= rate, "TokenExchange: rate err");
+        require(20 >= rate_, "TokenExchange: rate err");
         rate = rate_;
     }
 
     function setFeeTo(address payable feeTo_) external onlySuperAdminRole {
         feeTo = feeTo_;
+    }
+
+    function setUnionRate(uint256 unionLowRate_, uint256 unionRate_) external onlySuperAdminRole {
+        unionLowRate = unionLowRate_;
+        unionRate = unionRate_;
     }
 
     function setAllUserExchangeEnable() external onlySuperAdminRole {
@@ -472,6 +484,10 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
 
     function setManagerGetFilLevel(uint256 amount) external onlySuperAdminRole {
         managerFilLimitAmount = amount;
+    }
+
+    function setManagerLimitAmount(uint256 amount) external onlySuperAdminRole {
+        managerLimitAmount = amount;
     }
 
     function setManagerLevel(uint256 levelLow_, uint256 levelHigh_) external onlySuperAdminRole {

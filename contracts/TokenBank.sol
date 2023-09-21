@@ -19,6 +19,7 @@ contract TokenBank is AccessControlEnumerable {
     ITokenBankReward public keyReward;
     ITokenBankReward public dfilReward;
     EnumerableSet.AddressSet private _rewardCoins;
+    mapping(address => bool) public rewardCoinsType; // 类型，按次false，按金额true
 
     uint256 public total;
     mapping(address => uint256) public userBalance;
@@ -99,7 +100,11 @@ contract TokenBank is AccessControlEnumerable {
         dfilReward.outRecord(_msgSender(), amount);
         if (_rewardCoins.length() > 0) {
             for (uint256 i = 0; i < _rewardCoins.length(); i++) {
-                ITokenBankReward(_rewardCoins.at(i)).outRecordKeyAt(_msgSender(), at); // 兼容
+                if (rewardCoinsType[_rewardCoins.at(i)]) {
+                    ITokenBankReward(_rewardCoins.at(i)).outRecord(_msgSender(), amount);
+                } else {
+                    ITokenBankReward(_rewardCoins.at(i)).outRecordKeyAt(_msgSender(), at);
+                }
             }
         }
 
@@ -126,7 +131,7 @@ contract TokenBank is AccessControlEnumerable {
         dfilReward.reward(_msgSender());
         if (_rewardCoins.length() > 0) {
             for (uint256 i = 0; i < _rewardCoins.length(); i++) {
-                ITokenBankReward(_rewardCoins.at(i)).outRecord(_msgSender());
+                ITokenBankReward(_rewardCoins.at(i)).reward(_msgSender());
             }
         }
 
@@ -150,8 +155,9 @@ contract TokenBank is AccessControlEnumerable {
     }
 
     // super admin
-    function addRewardCoin(address coin) external onlySuperAdminRole {
+    function addRewardCoin(address coin, bool stakeType) external onlySuperAdminRole {
         _rewardCoins.add(coin);
+        rewardCoinsType[coin] = stakeType;
     }
 
     function removeRewardCoin(address coin) external onlySuperAdminRole {

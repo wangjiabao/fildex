@@ -18,5 +18,5 @@ interface IDFIL {
 
     function getWhiteEnable() external view returns(bool);
 
-     function balanceOf(address owner) external view returns (uint);
+    function balanceOf(address owner) external view returns (uint);
 }

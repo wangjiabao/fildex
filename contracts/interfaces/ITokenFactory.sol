@@ -29,5 +29,5 @@ interface ITokenFactory {
 
     function existsToken(address token) external view returns (bool);
 
-    function existsTopUnionTokens(address token) external view returns (bool);
+    function existsTopUnionToken(address token) external view returns (bool);
 }

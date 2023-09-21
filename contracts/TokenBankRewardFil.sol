@@ -1,24 +1,23 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "./interfaces/IDFIL.sol";
+import "./interfaces/IManager.sol";
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 
-contract TokenBankRewardDfil is AccessControlEnumerable {
+contract TokenBankRewardFil is AccessControlEnumerable {
     using SafeMath for uint256;
     using EnumerableSet for EnumerableSet.AddressSet;
     using EnumerableSet for EnumerableSet.UintSet;
 
-    bytes32 public constant GRANT_SET_REWARD_ROLE = keccak256("GRANT_SET_REWARD_ROLE");
-    bytes32 public constant SET_REWARD_ROLE = keccak256("SET_REWARD_ROLE");
+    bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
 
     uint256 public total;
     mapping(address => uint256) public userBalance;
 
-    IDFIL public rewardUNIToken;
+    IManager public manager;
     address public bank;
 
     uint256 public stakingFinishTime = block.timestamp;
@@ -27,8 +26,7 @@ contract TokenBankRewardDfil is AccessControlEnumerable {
     uint256 public lastUpdateTime;
     uint256 public rewardRate;
 
-    uint256 public currentReward;
-    uint256 public stakeRewardCycle = 604800;
+    uint256 public stakeRewardCycle = 86400;
 
     mapping(address => uint256) public rewards;
     mapping(address => uint256) public userRewardsPerToken;
@@ -49,11 +47,17 @@ contract TokenBankRewardDfil is AccessControlEnumerable {
     event RewardCompleted(address indexed account, uint256 amount);
     event SetRewardRateAndStakingFinishTimeCompleted(uint256 rewardRate, uint256 stakeRewardCycle);
 
-    constructor(address rewardUNIToken_) {
-        rewardUNIToken = IDFIL(rewardUNIToken_);
+    modifier onlySuperAdminRole() {
+        require(hasRole(SUPER_ADMIN_ROLE, _msgSender()), "TokenBankRewardFil: must have super admin role to set");
+        _;
+    }
+
+    constructor(address bank_, address manager_) {
+        bank = bank_;
+        manager = IManager(manager_);
 
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _setRoleAdmin(SET_REWARD_ROLE, GRANT_SET_REWARD_ROLE); // tokenFactory
+        _grantRole(SUPER_ADMIN_ROLE, _msgSender());
     }
     
     function getLastTime() public view returns (uint256) {
@@ -73,7 +77,7 @@ contract TokenBankRewardDfil is AccessControlEnumerable {
     }
 
     function record(address account, uint256 amount) external update(account) {
-        require(bank == _msgSender(), "TokenBank: must bank to record");
+        require(bank == msg.sender, "TokenBank: must bank to record");
         
         userBalance[account] = userBalance[account].add(amount);
         total = total.add(amount);
@@ -104,31 +108,23 @@ contract TokenBankRewardDfil is AccessControlEnumerable {
     }
 
     function rewardHandle(address account) internal update(account) {
-        require(bank == _msgSender(), "TokenBank: must bank to reward");
+        require(bank == msg.sender, "TokenBank: must bank to reward");
 
         uint256 stakingRewards = rewards[account];
         if (stakingRewards > 0) {
             rewards[account] = 0;
-            rewardUNIToken.transfer(account, stakingRewards);
-
-            emit RewardCompleted(account, stakingRewards);
+            manager.withdrawReward(stakingRewards, account);
         }
-    }
 
-    /**
-     * 算力代币合约陆续设置分红收益
-     */
-    function setCurrentReward(uint256 amount) external {
-        require(hasRole(SET_REWARD_ROLE, _msgSender()), "Token: must set reward role to set");
-        currentReward = currentReward.add(amount);
+        emit RewardCompleted(account, stakingRewards);
     }
 
     /**
      *  根据分红收益数量，设置分红速率和周期
      */
-    function setRewardRateAndStakingFinishTime() external {
+    function setCurrentReward(uint256 currentReward) external {
+        require(address(manager) == msg.sender, "TokenBank: must manager");
         require(block.timestamp > stakingFinishTime, "TokenBank: must finish last reward");
-        require(currentReward > 0, "TokenBank: must reward more than 0");
 
         rewardPerTokenStored = rewardUNIPerToken();
 
@@ -140,8 +136,6 @@ contract TokenBankRewardDfil is AccessControlEnumerable {
 
         _historyRewardRate.add(rewardRate);
         _historyStakingTime.add(stakeRewardCycle);
-
-        currentReward = 0;
 
         emit SetRewardRateAndStakingFinishTimeCompleted(rewardRate, stakeRewardCycle);
     }
@@ -158,14 +152,8 @@ contract TokenBankRewardDfil is AccessControlEnumerable {
         return stakingFinishTime;
     }
 
-    // tokenFactory
-    function setRewarder(address account) external {
-        grantRole(SET_REWARD_ROLE, account);
-    }
-    
-    // default admin 
-    function setBank(address bank_) external {
-        require(hasRole(DEFAULT_ADMIN_ROLE, _msgSender()), "TokenBank: must have default admin role to set");
-        bank = bank_;
+    // super admin 
+    function setStakeRewardCycle(uint256 stakeRewardCycle_) external onlySuperAdminRole {
+        stakeRewardCycle = stakeRewardCycle_;
     }
 }

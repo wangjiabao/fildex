@@ -11,17 +11,16 @@ import "./interfaces/ITokenExchange.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/access/AccessControlEnumerable.sol";
 
-contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
+contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable {
     using SafeMath for uint256;
     using SafeCast for int256;
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OWNER_ROLE = keccak256("OWNER_ROLE");
 
@@ -77,6 +76,11 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
     uint256 public totalStageAmount;
     
     event ExchangeToken(address indexed account, uint256 amount);
+    event SetRewardCompleted(uint256 amount);
+    event StakeCompleted(address indexed account, uint256 amount);
+    event UnStakeCompleted(address indexed account, uint256 amount);
+    event WithdrawReward(address indexed account, uint256 amount);
+    event OwnerUnionWithdrawCompleted(address indexed account, uint256 amount);
 
     constructor() ERC20("Token", "T") {
         _disableInitializers();
@@ -85,8 +89,6 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
     function initialize(ITokenTemplate.CreateData calldata createData) initializer public returns (bool) {
         require(createData.cap_ > 0, "Token: cap is 0");
 
-        _setRoleAdmin(ADMIN_ROLE, SUPER_ADMIN_ROLE);
-        _grantRole(SUPER_ADMIN_ROLE, createData.superAdmin);
         _grantRole(ADMIN_ROLE, createData.defaultAdmin);
         _grantRole(OWNER_ROLE, createData.owner_);
 
@@ -164,7 +166,7 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         sellAmount = sellAmount.add(amount);
         _mint(_msgSender(), amount);
         if (!mintToDefaultAdmin) {   
-            _mint(defaultAdmin, 1024*1024*1024); // 1gb增发一次
+            _mint(defaultAdmin, 100000000000000); // 1gb增发一次
             mintToDefaultAdmin = true;
         }
         
@@ -201,6 +203,8 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         uint256 tmp = sellAmount.sub(withdrawSellAmount);
         withdrawSellAmount = sellAmount;
         dfil.transfer(_msgSender(), tmp.mul(costRatePerToken).div(costBasePerToken).add(tmp.mul(profitRatePerToken).div(profitBasePerToken))); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
+        
+        emit OwnerUnionWithdrawCompleted(_msgSender(), tmp.mul(costRatePerToken).div(costBasePerToken).add(tmp.mul(profitRatePerToken).div(profitBasePerToken)));
     }
 
     /**
@@ -239,6 +243,8 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         dfil.transferFrom(user, address(this), amount);
         stageRecords[user] = stageRecords[user].add(amount);
         totalStageAmount = totalStageAmount.add(amount);
+
+        emit StakeCompleted(user, amount);
     }
     
     /**
@@ -253,6 +259,8 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         stageRecords[user] = stageRecords[user].sub(amount);
         totalStageAmount = totalStageAmount.sub(amount);  
         dfil.transfer(user, amount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
+
+        emit UnStakeCompleted(user, amount);
     }
 
     /**
@@ -270,6 +278,8 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
         rewardAll = rewardAll.add(msg.value.mul(rewardRate).div(rewardBase));
         dfil.transfer(address(bank), msg.value.mul(rewardBankRate).div(rewardBankBase));
         bank.setCurrentReward(msg.value.mul(rewardBankRate).div(rewardBankBase));
+
+        emit SetRewardCompleted(msg.value);
     }
 
     /**
@@ -296,6 +306,8 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
             rewardAll = tmpAll - amount;
             dfil.transfer(to, amount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
         }
+        
+        emit WithdrawReward(to, amount);
     }
 
     // swapFactory
@@ -309,10 +321,5 @@ contract TokenTemplate is ERC20, AccessControlEnumerable, Initializable {
     function setWhiteEnable(bool enable) external {
         require(hasRole(ADMIN_ROLE, _msgSender()), "Token: must have admin role to set");
         whiteEnable = enable;
-    }
-
-    function setWhite(address account, bool enable) external {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "Token: must have admin role to set");
-        white[account] = enable;
     }
 }
