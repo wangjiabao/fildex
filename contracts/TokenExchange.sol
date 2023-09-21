@@ -28,6 +28,11 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     // 理财地址和金额
     address payable public manager;
     uint256 public managerAmount;
+    bool public useManager = true;
+    uint256 public levelLow;
+    uint256 public levelHigh;
+    uint256 public managerFilLimitAmount;
+    uint256 public managerLimitAmount = 1000000000000000000; // 每次最少送出金额
 
     ITokenFactory public factory;
     IDFIL public dfil;
@@ -36,11 +41,6 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
     uint256 public rate = 2;
     uint256 public base = 1000;
     address payable public feeTo;
-
-    uint256 public levelLow;
-    uint256 public levelHigh;
-    uint256 public managerFilLimitAmount;
-    uint256 public managerLimitAmount = 1000000000000000000; // 每次最少送出金额
 
     bool public exchangeEnableNoLimit;
     mapping(address => int256) public tokenOwnerFilIn;
@@ -407,7 +407,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
      * 从理财处取得fil
      */
     function callManagerForFil(uint256 amount) internal returns (bool) {
-        if (address(0) == manager || 0 == managerAmount) { // 没地址或无账
+        if (!useManager || address(0) == manager || 0 == managerAmount) { // 没地址或无账
             return true;
         }
 
@@ -430,7 +430,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
      * 给理财fil
      */
     function callManagerToFil() internal returns (bool) {
-        if (address(0) == manager || managerFilLimitAmount <= managerAmount || levelHigh > address(this).balance) {
+        if (!useManager || address(0) == manager || managerFilLimitAmount <= managerAmount || levelHigh > address(this).balance) {
             return false;
         }
 
@@ -488,6 +488,25 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
 
     function setManagerLimitAmount(uint256 amount) external onlySuperAdminRole {
         managerLimitAmount = amount;
+    }
+
+    function setUseManager(bool useManager_) external onlySuperAdminRole {
+        useManager = useManager_;
+    }
+
+    function closeManager(uint256 amount) external onlySuperAdminRole {
+        uint256 forAmount = managerAmount;
+        if(amount > 0) {
+            forAmount = amount;
+        }
+
+        useManager = false;
+        levelLow = 0;
+        levelHigh = 0;
+        managerFilLimitAmount = 0;
+
+        managerAmount = managerAmount.sub(forAmount);
+        IManager(manager).repay(forAmount);
     }
 
     function setManagerLevel(uint256 levelLow_, uint256 levelHigh_) external onlySuperAdminRole {

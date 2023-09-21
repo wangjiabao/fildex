@@ -74,11 +74,10 @@ contract FilecoinMinerControllerTemplate is Initializable {
             }
 
             endTime = block.timestamp.add(TIME+TIME_LIMIT*timeType);
+            rewardStartTime = block.timestamp.add(rewardStartTimeLimit);
+
+            factory.setAcotrMinerController(actor, address(this));
         }
-
-        rewardStartTime = block.timestamp.add(rewardStartTimeLimit);
-
-        factory.setAcotrMinerController(actor, address(this));
     }
 
     /**
