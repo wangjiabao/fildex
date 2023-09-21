@@ -13,6 +13,7 @@ interface IFilecoinMinerControllerTemplate {
         bool union;
         uint256 timeType;
         uint256 extraTime;
+        uint256 rewardStartTime;
     }
 
     struct CheckData {

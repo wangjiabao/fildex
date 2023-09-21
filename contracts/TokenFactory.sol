@@ -34,6 +34,7 @@ contract TokenFactory is AccessControlEnumerable {
     address public superAdmin;
     address public defaultAdmin;
     uint256 public idoStartTime = 5*24*3600;
+    uint256 public rewardStartTime;
 
     IDFIL public dfil;
     IKey public key;
@@ -325,7 +326,8 @@ contract TokenFactory is AccessControlEnumerable {
             address(this),
             createControllerData.union,
             tmpTimeType,
-            createControllerData.extraTime
+            createControllerData.extraTime,
+            rewardStartTime
         )), "TokenFactory: init err");
 
         require(IFilecoinMinerTemplate(filecoinMiner).initialize(createControllerData.actor, payable(filecoinControllerMiner)), "TokenFactory: init err");
@@ -716,6 +718,10 @@ contract TokenFactory is AccessControlEnumerable {
     // super admin
     function setIdoStartTime(uint256 timeStamp) external onlySuperAdminRole {
         idoStartTime = timeStamp;  
+    }
+
+    function setRewardStartTime(uint256 timeStamp) external onlySuperAdminRole {
+        rewardStartTime = timeStamp;  
     }
 
     function setDefaultAdmin(address defaultAdmin_) external onlySuperAdminRole {

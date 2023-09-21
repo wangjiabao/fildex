@@ -21,6 +21,7 @@ contract FilecoinMinerControllerTemplate is Initializable {
     address payable public owner;
     uint256 public timeType;
     uint256 public rewardStartTime;
+    uint256 public rewardStartTimeLimit;
     uint256 public endTime;
     uint256 public extraTime;
     uint256 public pledge;
@@ -47,6 +48,7 @@ contract FilecoinMinerControllerTemplate is Initializable {
         union = createData.union;
         timeType = createData.timeType;
         extraTime = createData.extraTime;
+        rewardStartTimeLimit = createData.rewardStartTime;
         notReturnPledge = true;
         return true;
     }
@@ -74,7 +76,7 @@ contract FilecoinMinerControllerTemplate is Initializable {
             endTime = block.timestamp.add(TIME+TIME_LIMIT*timeType);
         }
 
-        rewardStartTime = block.timestamp.add(604800);
+        rewardStartTime = block.timestamp.add(rewardStartTimeLimit);
 
         factory.setAcotrMinerController(actor, address(this));
     }
