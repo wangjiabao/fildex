@@ -44,4 +44,6 @@ interface ITokenTemplate {
     function setReward() payable external;
 
     function setStake(address stake_) external;
+
+    function getDepositAllIn() external view returns (bool);
 }

@@ -44,8 +44,7 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
     uint256 public costBasePerToken;
     uint256 public profitRatePerToken;
     uint256 public profitBasePerToken;
-    uint256 public depositRatePerToken;
-    uint256 public depositBasePerToken;
+    uint256 public pledge;
 
     uint256 public rewardOwnerRate;
     uint256 public rewardOwnerBase;
@@ -117,8 +116,7 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
         costBasePerToken = createData.costBasePerToken;
         profitRatePerToken = createData.profitRatePerToken;
         profitBasePerToken = createData.profitBasePerToken;
-        depositRatePerToken = createData.pledge.mul(10000).div(_cap); // 这样存是为了保证抵押币小于cap时，计算的时候能模拟小数
-        depositBasePerToken = 10000;
+        pledge = createData.pledge;
         controller = createData.controller;
         swapFactory = createData.swapFactory;
         callPair = createData.callPair;
@@ -127,7 +125,7 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
         keyRatePerT = createData.keyRatePerT;
         keyBasePerT = createData.keyBasePerT;
 
-        totalAmount = _cap.mul(costRatePerToken).div(costBasePerToken).add(_cap.mul(profitRatePerToken).div(profitBasePerToken)).add(_cap.mul(depositRatePerToken).div(depositBasePerToken));
+        totalAmount = _cap.mul(costRatePerToken).div(costBasePerToken).add(_cap.mul(profitRatePerToken).div(profitBasePerToken)).add(pledge);
         uint256 allowAccountUnionAmountTotal = tokenExchange.getAllowAccountUnionAmountTotal();
         address[] memory allowAccountUnion = tokenExchange.getAllowAccountUnion();
         require(totalAmount <= allowAccountUnionAmountTotal, "Token: Insufficient fil balance");
@@ -138,7 +136,7 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
                 allowAccountUnion[i], 
                 tokenExchange.getAllowAccountUnionAmount(allowAccountUnion[i]).mul(_cap.mul(costRatePerToken).div(costBasePerToken)).div(allowAccountUnionAmountTotal), 
                 tokenExchange.getAllowAccountUnionAmount(allowAccountUnion[i]).mul(_cap.mul(profitRatePerToken).div(profitBasePerToken)).div(allowAccountUnionAmountTotal), 
-                tokenExchange.getAllowAccountUnionAmount(allowAccountUnion[i]).mul(_cap.mul(depositRatePerToken).div(depositBasePerToken)).div(allowAccountUnionAmountTotal), 
+                tokenExchange.getAllowAccountUnionAmount(allowAccountUnion[i]).mul(pledge).div(allowAccountUnionAmountTotal), 
                 true
             );
 
@@ -254,7 +252,7 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
         require(0 < sellAmount.sub(sellAmounts[_msgSender()]), "Token: amount must more than 0");
 
         uint256 tmpSellCostAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(costRatePerToken).div(costBasePerToken);
-        uint256 tmpSellDepositAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(depositRatePerToken).div(depositBasePerToken);
+        uint256 tmpSellDepositAmount = sellAmount.sub(sellAmounts[_msgSender()]).mul(pledge.mul(10000000000).div(_cap)).div(10000000000); // 提高精确度
         sellAmounts[_msgSender()] = sellAmount;
 
         dfil.approve(address(tokenExchange), tmpSellCostAmount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
@@ -343,12 +341,15 @@ contract TokenUnionTemplate is ERC20Burnable, AccessControlEnumerable, Initializ
      */
     function depositFilIn() payable external {
         require(controller == _msgSender(), "Token: must controller");
-        require(_cap.mul(depositRatePerToken).div(depositBasePerToken) <= msg.value, "Token: not enough");
         
         depositAmount = depositAmount.add(msg.value);
         for (uint256 i = 0; i < _accountUnion.length(); i++) {
            tokenExchange.FILIN{value: accountUnionAmount[_accountUnion.at(i)].mul(msg.value).div(totalAmount)}(_accountUnion.at(i));
         }
+    }
+
+    function getDepositAllIn() external view returns (bool) {
+        return pledge <= depositAmount;
     }
 
     /**

@@ -88,12 +88,12 @@ contract FilecoinMinerControllerTemplate is Initializable {
             block.timestamp > endTime && 
             block.timestamp <= endTime + extraTime && 
             notReturnPledge && 
-            msg.sender == owner && 
-            msg.value >= pledge
+            msg.sender == owner
         ) { // 到期和加时内，抵押币未还且输入金额满足抵押币
             miner.transferOwner(newOwner);
             token.depositFilIn{value: msg.value}();
-            pledge = 0;
+            require(token.getDepositAllIn(), "not enough deposit");
+
             notReturnPledge = false;
             return;
         } else if (!notReturnPledge && msg.sender == owner) { // 抵押币已还，未接受owner转移，换账户接受
@@ -101,14 +101,10 @@ contract FilecoinMinerControllerTemplate is Initializable {
             return;
         }  else if (block.timestamp > endTime + extraTime) { // 加时后，提够抵押币，不限制，可以一直提
             uint256 tmpCurrentPledge = miner.withdraw();
-            if (tmpCurrentPledge >= pledge) {
-                pledge = 0;
-                notReturnPledge = false;
-            } else {
-                pledge = pledge.sub(tmpCurrentPledge);
-            }
-
             token.depositFilIn{value: tmpCurrentPledge}();
+            if (token.getDepositAllIn()) {
+                notReturnPledge = false;
+            }
             return;
         }
             
@@ -149,7 +145,6 @@ contract FilecoinMinerControllerTemplate is Initializable {
         require(msg.sender == address(factory), "err");
         token.depositFilIn{value: pledge}();
         notReturnPledge = false;
-        pledge = 0;
     }
 
     function adminWithdraw(address payable account) external {

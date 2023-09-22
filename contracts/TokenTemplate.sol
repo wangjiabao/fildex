@@ -44,8 +44,7 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
     uint256 public costBasePerToken;
     uint256 public profitRatePerToken;
     uint256 public profitBasePerToken;
-    uint256 public depositRatePerToken;
-    uint256 public depositBasePerToken;
+    uint256 public pledge;
 
     uint256 public rewardOwnerRate;
     uint256 public rewardOwnerBase;
@@ -112,8 +111,7 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
         costBasePerToken = createData.costBasePerToken;
         profitRatePerToken = createData.profitRatePerToken;
         profitBasePerToken = createData.profitBasePerToken;
-        depositRatePerToken = createData.pledge.mul(10000).div(_cap); // 这样存是为了保证抵押币小于cap时，计算的时候能模拟小数
-        depositBasePerToken = 10000;
+        pledge = createData.pledge;
         controller = createData.controller;
         swapFactory = createData.swapFactory;
         callPair = createData.callPair;
@@ -123,7 +121,7 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
         keyRatePerT = createData.keyRatePerT;
         keyBasePerT = createData.keyBasePerT;
 
-        tokenExchange.FILLOCK(owner, _cap.mul(costRatePerToken).div(costBasePerToken), _cap.mul(profitRatePerToken).div(profitBasePerToken), _cap.mul(depositRatePerToken).div(depositBasePerToken), false);
+        tokenExchange.FILLOCK(owner, _cap.mul(costRatePerToken).div(costBasePerToken), _cap.mul(profitRatePerToken).div(profitBasePerToken), pledge, false);
 
         rewardOwnerRate = createData.rewardOwnerRate;
         rewardOwnerBase = createData.rewardOwnerBase;
@@ -292,10 +290,13 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
      */
     function depositFilIn() payable external {
         require(controller == _msgSender(), "Token: must controller");
-        require(_cap.mul(depositRatePerToken).div(depositBasePerToken) <= msg.value, "Token: not enough");
         
         depositAmount = depositAmount.add(msg.value);
         tokenExchange.FILIN{value: msg.value}(owner);
+    }
+
+    function getDepositAllIn() external view returns (bool) {
+        return pledge <= depositAmount;
     }
 
     /**
