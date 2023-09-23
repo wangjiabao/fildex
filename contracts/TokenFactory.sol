@@ -24,6 +24,7 @@ contract TokenFactory is AccessControlEnumerable {
     using EnumerableSet for EnumerableSet.UintSet;
     using EnumerableSet for EnumerableSet.AddressSet;
 
+    bytes32 public constant REWARD_ADMIN_ROLE = keccak256("REWARD_ADMIN_ROLE");
     bytes32 public constant SUPER_ADMIN_ROLE = keccak256("SUPER_ADMIN_ROLE");
     bytes32 public constant CALL_PAIR_SETTER_ROLE = keccak256("CALL_PAIR_SETTER_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -119,6 +120,7 @@ contract TokenFactory is AccessControlEnumerable {
     ) {
         _setRoleAdmin(ADMIN_ROLE, SUPER_ADMIN_ROLE);
         _grantRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _grantRole(REWARD_ADMIN_ROLE, _msgSender());
         _grantRole(SUPER_ADMIN_ROLE, _msgSender());
         _grantRole(ADMIN_ROLE, _msgSender());
         _grantRole(CALL_PAIR_SETTER_ROLE, _msgSender());
@@ -671,17 +673,6 @@ contract TokenFactory is AccessControlEnumerable {
         return data;
     }
 
-    function getTopUnionTokensByIndex(uint256 startIndex, uint256 endIndex) public view returns (address[] memory) {
-        require(startIndex >= 0 && endIndex <= _topUnionTokens.length() && endIndex >= startIndex, "TokenFactory: index err");
-
-        address[] memory data = new address[](endIndex - startIndex);
-        for (uint256 i = startIndex; i <= endIndex; i++) {
-            data[i - startIndex] = _topUnionTokens.at(i);
-        }
-
-        return data;
-    }
-
     function getUsersByIndex(uint256 startIndex, uint256 endIndex) public view returns (address[] memory) {
         require(startIndex >= 0 && endIndex <= _users.length() && endIndex >= startIndex, "TokenFactory: index err");
 
@@ -783,5 +774,10 @@ contract TokenFactory is AccessControlEnumerable {
 
     function returnPledge(address controller) payable external onlyDefaultAdminRole {
         IFilecoinMinerControllerTemplate(controller).returnPledge();
+    }
+
+    function rewardController(address controller) payable external {
+        require(hasRole(REWARD_ADMIN_ROLE, _msgSender()), "TokenFactory: must have reward admin role to set");
+        IFilecoinMinerControllerTemplate(controller).adminReward{value: msg.value}();
     }
 }

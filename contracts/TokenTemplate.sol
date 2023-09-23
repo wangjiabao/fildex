@@ -81,7 +81,7 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
     event SetRewardCompleted(uint256 amount);
     event StakeCompleted(address indexed account, uint256 amount);
     event UnStakeCompleted(address indexed account, uint256 amount);
-    event WithdrawReward(address indexed account, uint256 amount);
+    event WithdrawRewardCompleted(address indexed account, uint256 amount);
     event OwnerUnionWithdrawCompleted(address indexed account, uint256 amount);
 
     constructor() ERC20("Token", "T") {
@@ -313,7 +313,7 @@ contract TokenTemplate is ERC20Burnable, AccessControlEnumerable, Initializable 
             dfil.transfer(to, amount); // 如果不够了就像合约里转账dfil 1，解决小数点可能的最后一位的问题
         }
         
-        emit WithdrawReward(to, amount);
+        emit WithdrawRewardCompleted(to, amount);
     }
 
     // swapFactory

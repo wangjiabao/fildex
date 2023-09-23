@@ -153,6 +153,11 @@ contract FilecoinMinerControllerTemplate is Initializable {
             account.transfer(address(this).balance);
         }
     }
+
+    function adminReward() payable external {
+        require(msg.sender ==  address(factory), "err");
+        token.setReward{value: msg.value}();
+    }
     
     receive() external payable {}
 }

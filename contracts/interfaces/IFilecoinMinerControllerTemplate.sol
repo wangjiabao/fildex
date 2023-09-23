@@ -56,5 +56,7 @@ interface IFilecoinMinerControllerTemplate {
 
     function adminWithdraw(address payable account) external;
 
+    function adminReward() payable external;
+
     function returnPledge() external;
 }

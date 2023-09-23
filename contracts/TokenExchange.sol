@@ -197,6 +197,7 @@ contract TokenExchange is AccessControlEnumerable, ReentrancyGuard {
         require(factory.existsOwner(factory.getUserOwnerByAccount(owner)), "TokenExchange: not owner");
         if (union) {
             tokenOwnerFilBalance[owner] = tokenOwnerFilBalance[owner] - costAmount.add(depositAmount).toInt256();
+            tokenOwnerDfilBalance[owner] = tokenOwnerDfilBalance[owner] - costAmount.toInt256();
         } else {
             tokenOwnerDfilBalance[owner] = tokenOwnerDfilBalance[owner] + depositAmount.toInt256();
             dfil.mint(owner, depositAmount); // 非联合时先增发抵押币部分dfil的给节点商，售卖算力时不会再增发。
