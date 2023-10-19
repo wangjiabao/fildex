@@ -195,10 +195,9 @@ contract SwapPair is ISwapPair, SwapERC20 {
 
     modifier update(address owner) {
         if (owner != address(0)) {
+            rewards[owner] = allRewardsOfUser(owner);
             rewardPerTokenStored = rewardUNIPerToken();
             userRewardsPerToken[owner] = rewardPerTokenStored;
-            
-            rewards[owner] = allRewardsOfUser(owner);
             lastUpdateTime = getLastTime();
         }
         _;
