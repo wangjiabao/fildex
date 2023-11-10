@@ -21,7 +21,7 @@ library SwapLibrary {
                 hex'ff',
                 factory,
                 keccak256(abi.encodePacked(token0, token1)),
-                hex'976d79714c5505c123f4f5c68e5d668aa2601fc09f1385f185290ba88281342f' // init code hash
+                hex'47e8d00ed0ecdb403712698e2792a4b22615a52df105ff1712e9877b7372d8a4' // init code hash
             ))));
     }
 

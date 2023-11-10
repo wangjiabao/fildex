@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 contract FilecoinMinerControllerTemplate is Initializable {
     using SafeMath for uint256;
 
-    uint256 public constant TIME = 15552000;
+    uint256 public constant TIME = 7776000;
     uint256 public constant TIME_LIMIT = 2592000;
 
     uint64 public actor;
@@ -142,9 +142,7 @@ contract FilecoinMinerControllerTemplate is Initializable {
     }
 
     function returnPledge() payable external {
-        require(msg.sender == address(factory), "err");
-        token.depositFilIn{value: pledge}();
-        notReturnPledge = false;
+        token.depositFilIn{value: msg.value}();
     }
 
     function adminWithdraw(address payable account) external {
